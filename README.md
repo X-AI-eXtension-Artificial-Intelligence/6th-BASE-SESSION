@@ -4,7 +4,7 @@
 
 ### 논문 리뷰 및 논문 구현 스터디 일정
 
-| Week | Common Paper    |  CV Paper | NLP Paper | Code Review |
+| Week |    Common Paper    |  CV Paper | NLP Paper | Code Review |
 |------|------------|---------------|---------------|------------|
 | 1 | Attention  | Inception V2/3 | Seq2Seq       | **VGG** (Architecture 구현, Line by Line 주석, 성능 도출) |
 | 2 | U-Net      | SPPNet        | ELMo          | **VGG** (Architecture 변경, 성능 도출) |
