@@ -1,0 +1,4 @@
+nohup: ignoring input
+저장된 모델 vgg_model.pth 불러오기 성공!
+Files already downloaded and verified
+Accuracy of Test Data: 80.29000091552734%
