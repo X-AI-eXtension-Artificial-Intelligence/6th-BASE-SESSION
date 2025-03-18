@@ -40,7 +40,7 @@ class VGG16(nn.Module):
     model class를 정의할 때 nn.Module을 상속받는 이유?
     nn.Module : 딥러닝 모델을 구현할 때 필요한 기능(계층 관리, 파라미터 추적, 학습/평가 모드 전환, 저장/로드 등)을 통합적으로 제공
     '''
-    def __init__(self, base_dim, num_classes=10): # CIFAR10 사용했으므로
+    def __init__(self, base_dim, num_classes=1000): # CIFAR1000 사용했으므로
         super(VGG16, self).__init__()
         self.feature = nn.Sequential(
             conv_2_block(3, base_dim), # 64
@@ -59,10 +59,10 @@ class VGG16(nn.Module):
             nn.Linear(8*base_dim*1*1, 4096), # 왜 1*1 사용 ?
             nn.ReLU(True), # in-place 연산 True 의미. 텐서를 새롭게 생성하지 않고 기존 메모리를 덮어쓰는 방식으로 연산을 수행
             nn.Dropout(),
-            nn.Linear(4096, 10),
+            nn.Linear(4096, 1000),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(10, num_classes),
+            nn.Linear(1000, num_classes),
         )
 
     def forward(self, x):
