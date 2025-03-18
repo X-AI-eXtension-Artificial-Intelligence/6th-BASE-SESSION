@@ -1,60 +1,51 @@
-import torch
-import torch.nn as nn
-import torchvision.transforms as transforms
+import torchvision.datasets as datasets #Pytorch의 Vision 라이브러리 데이터셋 모듈
+import torchvision.transforms as transforms #이미지 전처리 및 변환을 위한 모듈
+from torch.utils.data import DataLoader #데이터를 미니배치로 로딩하기 위한 DataLoader 모듈
+from VGG16 import VGG16
+import torch 
+import torch.nn as nn #PyTorch 모듈 중 인공 신경망 모델을 설계하는데 필요한 함수를 모아둔 모듈
 
-from VGG16 import VGG16 ########
-from torch.utils.data import DataLoader
-from torchvision import datasets
+#setiing
+batch_size = 100 #각 반복에서 모델이 학습하는 데이터 샘플 수
+learning_rate = 0.0002 #각 업데이트 단에서 얼마나 많은 양의 매개변수를 조정할지 결정
+num_epoch = 100 #전체 데이터셋을 100번 반복해서 학습
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+print(device) #CUDA GPU 사용 가능 여부 확인
 
-num_epoch = 100         # 모델을 훈련시킬 epoch 수
-learning_rate = 0.0002  # 학습률: 모델 가중치를 업데이트할 때 조정되는 크기
-batch_size = 32         # 배치 크기: 모델을 한 번에 학습시키는 데이터의 수
+transforms = transforms.Compose( #이미지 데이터를 전처리하는 파이프라인 정의
+    [transforms.ToTensor(), #이미지를 Pytorch 텐서로 변환 
+     transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))] #평균 및 표준편차를 사용하여 각 채널의 픽셀 값을 정규화
+)
 
+#CIFAR10 데이터셋 load
+cifar10_train = datasets.CIFAR10(root='./Data/', train=True, transform=transforms, target_transform=None, download=True)
+cifar10_test = datasets.CIFAR10(root='./Data/', train=False, transform=transforms, target_transform=None, download=True)
 
-transform = transforms.Compose([                           # Compose: 여러 전처리 단계를 결합하는 객체
-    transforms.ToTensor(),                                 # 이미지를 PyTorch 텐서로 변환(0~1사이의 값으로 scaling)
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # 이미지 픽셀 값 범위 정규화(평균과 표준편차 모두 0.5로 설정)
-])
-
-cifar10_train = datasets.CIFAR10(root='./Data/',train=True,transform=transform,target_transform=None,download=True)
-cifar10_test = datasets.CIFAR10(root="./Data/", train=False, transform=transform, target_transform=None, download=True)
-
-
-# CIFAR10 데이터셋 로딩(train)
-train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) #shuffle=True:데이터를 무작위로 섞음 -> 모델 일반화 성능 향상
 test_loader = DataLoader(cifar10_test, batch_size=batch_size)
 
+#Train
+model = VGG16(base_dim=64).to(device) #모델 정의 #base_dim: 1번째 레이어의 필터 개수(출력 채널 수)
+loss_func = nn.CrossEntropyLoss() #손실 함수 정의
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate) #optimizer설정 #model.parameters:모델의 학습 가능한 파라미터들을 반환
 
-# VGG16 모델 인스턴스 생성 및 device에 할당
-model = VGG16(base_dim=64).to(device)
+loss_arr = [] #epoch마다 손실을 저장하기 위한 빈리스트 초기화
 
-# 손실함수 설정
-loss_func = nn.CrossEntropyLoss() 
+for i in range(num_epoch): 
+    for j,[image,label] in enumerate(train_loader): #각 epoch에서 미니배치에 대한 루프 시작
+        x = image.to(device) #입력 이미지를 CUDA GPU로 옮김
+        y = label.to(device) #label을 CUDA GPU로 옮김
 
-# 최적화 알고리즘으로 Adam을 사용
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer.zero_grad() #optimizer의 gradient를 0으로 설정
+        output = model.forward(x) #모델에 입력을 전달하여 예측값 생성
+        loss = loss_func(output,y) #예측값과 실제 레이블 간의 손실을 계산
+        loss.backward() #역전파를 수행하여 gradient 계산
+        optimizer.step() #optimizer를 사용하여 모델의 파라미터 업데이트
 
-loss_arr = []
+    if i%10 == 0 : #10 epoch마다 한 번씩 현재 손실을 출력
+        print(f'epoch {i} loss : ', loss) 
+        loss_arr.append(loss.cpu().detach().numpy()) #텐서를 gradient 계산에서 분리
 
-# 학습 과정
-for i in range(num_epoch):                             # num_epoch만큼 반복
-    for j, [image, label] in enumerate(train_loader):  # train_loader에서 배치사이즈 만큼 데이터룰 가져옴
-        x = image.to(device)                           
-        y = label.to(device)                          
-
-        optimizer.zero_grad()                          # 그라디언트 초기화((각 배치때마다 새로운 그라디언트 계산)
-
-        # 예측 및 손실 계산
-        output = model.forward(x) 
-        loss = loss_func(output, y)
-
-        # 역전파와 가중치 업데이트
-        loss.backward() 
-        optimizer.step() 
-    
-    if i % 2 == 0:                                      # epoch이 2의 배수일 때마다 손실값 출력
-        print(f'epoch {i} loss: {loss.item()}')
-        loss_arr.append(loss.cpu().detach().numpy())    # detach tensor를 gradient 연산에서 분리
-
-torch.save(model.state_dict(), "./train_model")         # 학습 완료 후 모델의 가중치 저장
+#모델의 학습된 가중치들을 저장
+torch.save(model.state_dict(), "./train_model")
