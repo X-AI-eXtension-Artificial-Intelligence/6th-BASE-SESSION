@@ -1,40 +1,49 @@
-import torch
+import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-
-from VGG16 import VGG16
 from torch.utils.data import DataLoader
-from torchvision import datasets
+from VGG16 import VGG16
+import torch
+import torch.nn as nn
 
-batch_size = 32
+#setting
+device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+print(device)
 
-# 이미지 전처리
-transform = transforms.Compose([
-    transforms.ToTensor(), 
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
-])
+batch_size = 100
 
-# CIFAR10 데이터셋 로딩(test)
-cifar10_test = datasets.CIFAR10(root="./Data/", train=False, transform=transform, target_transform=None, download=True)
+# Data
+transforms = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]
+)
+
+cifar10_test = datasets.CIFAR10(root="./Data/", train=False, transform=transforms, target_transform=None, download=True)
 
 test_loader = DataLoader(cifar10_test, batch_size=batch_size)
 
+#Train
 model = VGG16(base_dim=64).to(device)
-model.load_state_dict(torch.load("./train_model"))   # 훈련된 파라미터 로딩
+model.load_state_dict(torch.load('./train_model')) #사전에 훈련된 모델의 파라미터를 load
 
-correct = 0   # 정확히 예측된 데이터 수
-total = 0     # 전체 데이터 수
+# eval
+correct = 0
+total = 0
 
-model.eval()  # 모델을 평가 모드로 설정
+model.eval() #모델을 평가모드로 설정
 
-with torch.no_grad():                                                 # 그라디언트 계산X(메모리 사용량 감소)
-    for i, [image, label] in enumerate(test_loader):
-        x = image.to(device) 
-        y = label.to(device) 
+with torch.no_grad(): #평가 시에는 모델을 업데이트하지 않으므로, gradient를 계산할 필요가 없음 (메모리 사용량 줄임)
+    for i,[image,label] in enumerate(test_loader):
+        x = image.to(device)
+        y = label.to(device)
 
-        output = model(x)                                            
-        _, output_index = torch.max(output, 1)                        # 예측된 클래스 인덱스
+        output = model.forward(x)
+        
+        #output의 크기 = (배치 크기) x (클래스 수)
+        #1:output 텐서의 두 번째 차원을 따라 각 샘플에 대해 가장 높은 값을 가진 클래스를 찾음
+        #,_: 두개의 반환 값 중 인덱스만 output_index 변수에 할당
+        _,output_index = torch.max(output,1) 
 
-        total += label.size(0)                                        # 테스트 데이터 수 갱신
-        correct += (output_index == y).sum().float()                  # 정확한 예측 수 갱신
-    
-    print("Accuracy of Test Data: {}%".format(100 * correct / total)) # 정확도 출력
+        total += label.size(0) #현재 배치의 크기를 반환하여 전체 샘플 수 업데이트
+        correct += (output_index==y).sum().float() #정확하게 예측된 샘플의 수 업데이트
+
+    print("Accuracy of Test DataL {}%".format(100*correct/total))
