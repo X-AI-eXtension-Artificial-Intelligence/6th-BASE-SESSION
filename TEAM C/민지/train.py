@@ -1,5 +1,5 @@
 import os
-
+import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -25,7 +25,7 @@ def train_model(setting_config: dict):
 
 
     # Train
-    model = VGG16(base_dim=64, num_classes=100).to(device)
+    model = VGG16(c).to(device)
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -45,6 +45,8 @@ def train_model(setting_config: dict):
         if i%10 == 0:
             print(f'epcoh {i} loss : ', loss)
             loss_arr.append(loss.cpu().detach().numpy())
+
+    print('average of loss per 10% : ', np.mean(loss_arr))
 
     # 학습 완료된 모델 저장
     os.makedirs('model/', exist_ok=True)

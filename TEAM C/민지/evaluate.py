@@ -1,8 +1,7 @@
 from torch.utils.data import DataLoader
 
 from dataset import data_transform
-from vgg16_with_inception import VGG16
-# from vgg16 import VGG16
+from vgg16 import VGG16
 import torch
 
 def evaluate_model(setting_config: dict):
@@ -14,7 +13,7 @@ def evaluate_model(setting_config: dict):
     test_loader = DataLoader(test_set, batch_size=batch_size)
 
     # model load
-    model = VGG16(base_dim=64).to(device)
+    model = VGG16(base_dim=64, num_classes=100).to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
 
     # eval
@@ -34,11 +33,11 @@ def evaluate_model(setting_config: dict):
             total += label.size(0)
             correct += (output_index == y).sum().float()
 
-        print("### Accuracy of Test Data: {}%".format(100 * correct / total))
+    print("### Accuracy of Test Data: {}%".format(100 * correct / total))
 
 if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
-    model_path = "./model/inception_vgg16_epoch100.pth" #'./model/vgg16_10.pth'
+    model_path = "./model/vgg16_epoch100.pth" #'./model/vgg16_10.pth'
 
     setting_config = {
         "batch_size": 4,
