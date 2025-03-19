@@ -1,3 +1,5 @@
+import os
+
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -45,6 +47,7 @@ def train_model(setting_config: dict):
             loss_arr.append(loss.cpu().detach().numpy())
 
     # 학습 완료된 모델 저장
+    os.makedirs('model/', exist_ok=True)
     torch.save(model.state_dict(), setting_config['save_model_path'])
 
 if __name__ == '__main__':
