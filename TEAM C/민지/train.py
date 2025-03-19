@@ -25,7 +25,7 @@ def train_model(setting_config: dict):
 
 
     # Train
-    model = VGG16(c).to(device)
+    model = VGG16(base_dim=64, num_classes=100).to(device)
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
