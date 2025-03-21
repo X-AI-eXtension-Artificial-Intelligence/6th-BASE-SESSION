@@ -12,7 +12,7 @@ for i in trange(num_epoch):  # num_epoch 만큼 반복
         x = image.to(device)
         y_= label.to(device)
 
-        optimizer.zero_grad()  # 기울기 0으로 초기화 
+        optimizer.zero_grad()  # 기울기 0으로 초기화  계속 반복을 하니까 
         output = model.forward(x)  # 입력 이미지를 모델에 전달하여 예측 값을 계산
         loss = loss_func(output,y_)
         loss.backward()  # 기울기 계산 
@@ -21,3 +21,4 @@ for i in trange(num_epoch):  # num_epoch 만큼 반복
     if i % 10 ==0:
         print(loss)
         loss_arr.append(loss.cpu().detach().numpy())  # 손실 값을 기록하여 후속 분석에 활용하기 위함
+        # 기울기 계산 x, detach

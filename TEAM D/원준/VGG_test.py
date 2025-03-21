@@ -22,7 +22,7 @@ total = 0
 model.eval()
 
 # 인퍼런스 모드를 위해 no_grad 해줍니다.
-with torch.no_grad():  # 학습하지 않는다 
+with torch.no_grad():  # 학습하지 않는다 추론하는 거니까 필요 없다 
     # 테스트로더에서 이미지와 정답 불러오기 
     for image, label in test_loader:
     

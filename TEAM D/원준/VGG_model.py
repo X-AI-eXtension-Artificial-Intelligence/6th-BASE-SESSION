@@ -53,7 +53,7 @@ class VGG(nn.Module): # nn.Module은 PyTorch에서 모든 신경망 모델의 �
     def forward(self, x): # 모델이 데이터를 처리하는 방법을 정의하는 함수
         x = self.feature(x)
         x = x.view(x.size(0), -1)  # view 크기 변경 
-                                    # x.size(0) 배치 사이즈 
+                                    # x.size(0) 배치 사이즈  빼고 나머지 납작
                                     # 함수텐서를 펼쳐서 Fully Connected Layer에 입력 일렬로 배열열
         x = self.fc_layer(x)
         return x
