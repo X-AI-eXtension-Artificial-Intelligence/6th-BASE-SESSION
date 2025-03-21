@@ -1,10 +1,11 @@
-import torchvision.datasets as datasets # Pytorch의 Vision 라이브러리 데이터셋 모듈
+import torch
+import torch.nn as nn                       # PyTorch 모듈 중 인공 신경망 모델을 설계하는데 필요한 함수를 모아둔 모듈
+import torch.nn.functional as F
+import torchvision.datasets as datasets     # Pytorch의 Vision 라이브러리 데이터셋 모듈
 import torchvision.transforms as transforms # 이미지 전처리 및 변환을 위한 모듈
-from torch.utils.data import DataLoader # 데이터를 미니배치로 로딩하기 위한 DataLoader 모듈
+from torch.utils.data import DataLoader     # 데이터를 미니배치로 로딩하기 위한 DataLoader 모듈
 
 from VGG16 import VGG16
-import torch 
-import torch.nn as nn # PyTorch 모듈 중 인공 신경망 모델을 설계하는데 필요한 함수를 모아둔 모듈
 
 #setiing
 batch_size = 100 # 각 반복에서 모델이 학습하는 데이터 샘플 수
@@ -15,17 +16,18 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')  # GPU �
 print(device)
 
 # 이미지 데이터를 전처리
-transforms = transforms.Compose(   
+transform = transforms.Compose(   
     [transforms.ToTensor(),        # 이미지를 Pytorch 텐서로 변환(numpy -> tensor) 
      transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]  # 평균(첫번째 인자)과 표준편차(두번째 인자)를 사용하여 각 채널의 픽셀 값을 정규화
 )
 
 # 데이터셋 load
-cifar10_train = datasets.CIFAR10(root='./Data/', train=True, transform=transforms, target_transform=None, download=True)
-cifar10_test = datasets.CIFAR10(root='./Data/', train=False, transform=transforms, target_transform=None, download=True)
+cifar10_train = datasets.CIFAR10(root="./Data/", train=True, transform=transform, target_transform=None, download=True)
+# train=True: 학습용 데이터셋 로드
+# transform: 데이터셋을 로드하면서 정의된 전처리 변환 적용
 
+# DataLoader를 통해 배치 단위로 데이터를 로드
 train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) # shuffle=True: 데이터를 무작위로 섞음 -> 모델 일반화 성능 향상
-test_loader = DataLoader(cifar10_test, batch_size=batch_size)
 
 # Train
 model = VGG16(base_dim=64).to(device) # 모델 정의 # base_dim: 1번째 레이어의 필터 개수(= 출력 채널 수) # to(device): 모델을 지정된 장치(GPU)로 이동
