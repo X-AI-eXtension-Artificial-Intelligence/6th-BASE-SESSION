@@ -1,10 +1,11 @@
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+import torch
+import torch.nn as nn                       # PyTorch 모듈 중 인공 신경망 모델을 설계하는데 필요한 함수를 모아둔 모듈
+import torch.nn.functional as F
+import torchvision.datasets as datasets     # Pytorch의 Vision 라이브러리 데이터셋 모듈
+import torchvision.transforms as transforms # 이미지 전처리 및 변환을 위한 모듈
+from torch.utils.data import DataLoader     # 데이터를 미니배치로 로딩하기 위한 DataLoader 모듈
 
 from VGG16 import VGG16
-import torch
-import torch.nn as nn
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
@@ -13,7 +14,7 @@ print(device)
 batch_size = 100
 
 # 이미지 데이터를 전처리
-transforms = transforms.Compose(
+transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]
 )
