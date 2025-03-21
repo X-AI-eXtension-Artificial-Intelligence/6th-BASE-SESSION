@@ -21,11 +21,12 @@ transforms = transforms.Compose(
 )
 
 # 데이터셋 load
-cifar10_train = datasets.CIFAR10(root='./Data/', train=True, transform=transforms, target_transform=None, download=True)
-cifar10_test = datasets.CIFAR10(root='./Data/', train=False, transform=transforms, target_transform=None, download=True)
+cifar10_train = datasets.CIFAR10(root="./Data/", train=True, transform=transform, target_transform=None, download=True)
+# train=True: 학습용 데이터셋 로드
+# transform: 데이터셋을 로드하면서 정의된 전처리 변환 적용
 
+# DataLoader를 통해 배치 단위로 데이터를 로드
 train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) # shuffle=True: 데이터를 무작위로 섞음 -> 모델 일반화 성능 향상
-test_loader = DataLoader(cifar10_test, batch_size=batch_size)
 
 # Train
 model = VGG16(base_dim=64).to(device) # 모델 정의 # base_dim: 1번째 레이어의 필터 개수(= 출력 채널 수) # to(device): 모델을 지정된 장치(GPU)로 이동

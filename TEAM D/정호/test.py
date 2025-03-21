@@ -18,8 +18,8 @@ transforms = transforms.Compose(
      transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]
 )
 
-# 데이터셋 load
-cifar10_test = datasets.CIFAR10(root="./Data/", train=False, transform=transforms, target_transform=None, download=True)
+# train=False : 테스트용 데이터셋 load
+cifar10_test = datasets.CIFAR10(root="./Data/", train=False, transform=transform, target_transform=None, download=True)
 
 test_loader = DataLoader(cifar10_test, batch_size=batch_size)
 
