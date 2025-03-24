@@ -12,26 +12,31 @@
 '''
 
 import torch.nn as nn
-import pandas as pd
+
+def asymmetric_conv_block(in_dim, out_dim):
+    model = nn.Sequential(
+        nn.Conv2d(in_dim,out_dim,kernel_size=(1,3), padding=(0, 1)),
+        nn.BatchNorm2d(out_dim),
+        nn.ReLU(),
+        nn.Conv2d(out_dim,out_dim,kernel_size=(3,1), padding=(1,0)),
+        nn.BatchNorm2d(out_dim),
+        nn.ReLU()
+    )
+    return model
 def conv_2_block(in_dim,out_dim):
     model = nn.Sequential(
-        nn.Conv2d(in_dim,out_dim,kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(out_dim,out_dim,kernel_size=3, padding=1),
-        nn.ReLU(),
+        asymmetric_conv_block(in_dim,out_dim),
+        asymmetric_conv_block(out_dim, out_dim),
         nn.MaxPool2d(2,2)
     )
     return model
 
-def conv_3_block(in_dim, out_dim):
+def conv_3_block(in_dim,out_dim):
     model = nn.Sequential(
-        nn.Conv2d(in_dim,out_dim,kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(out_dim,out_dim,kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(out_dim,out_dim,kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.MaxPool2d(2, 2)
+        asymmetric_conv_block(in_dim,out_dim),
+        asymmetric_conv_block(out_dim,out_dim),
+        asymmetric_conv_block(out_dim, out_dim),
+        nn.MaxPool2d(2,2)
     )
     return model
 
@@ -40,29 +45,31 @@ class VGG16(nn.Module):
     model class를 정의할 때 nn.Module을 상속받는 이유?
     nn.Module : 딥러닝 모델을 구현할 때 필요한 기능(계층 관리, 파라미터 추적, 학습/평가 모드 전환, 저장/로드 등)을 통합적으로 제공
     '''
-    def __init__(self, base_dim, num_classes=1000): # CIFAR1000 사용했으므로
+    def __init__(self, base_dim, num_classes=10): # CIFAR10 사용했으므로
         super(VGG16, self).__init__()
         self.feature = nn.Sequential(
             conv_2_block(3, base_dim), # 64
             conv_2_block(base_dim,2*base_dim), # 128
+
             conv_3_block(2*base_dim, 4*base_dim), # 256
             conv_3_block(4*base_dim, 8*base_dim), # 512
             conv_3_block(8*base_dim, 8*base_dim), # 512
         )
-        '''
-        CIFAR10 (32×32) 이미지를 사용하면 여러 차례의 conv와 pooling을 거쳐 최종 피처맵 크기가 1×1이 됨
-        => fc_layer에 입력되는 피쳐의 총 개수: (채널 수)×(가로 크기)×(세로 크기)로 계산되므로 8×base_dim×1×1이 되는 것
-        논문처럼 입력 이미지가 224×224이면, V마지막 conv layer 후 피처맵의 크기가 보통 7×7이 되어 7×7×채널 수가 입력 차원이 됨
-        '''
         self.fc_layer = nn.Sequential(
             # CIFAR10은 크기가 32x32이므로
-            nn.Linear(8*base_dim*1*1, 4096), # 왜 1*1 사용 ?
+            nn.Linear(8*base_dim*1*1, 4096), # 512, 4096 왜 1*1 사용 ? -> 가독성. 펼쳐지는 걸 보여주는 / 7*7
             nn.ReLU(True), # in-place 연산 True 의미. 텐서를 새롭게 생성하지 않고 기존 메모리를 덮어쓰는 방식으로 연산을 수행
             nn.Dropout(),
-            nn.Linear(4096, 1000),
+            nn.Linear(4096, 2048),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(1000, num_classes),
+            nn.Linear(2048, 1000),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(1000, 512),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(512, num_classes),
         )
 
     def forward(self, x):
