@@ -3,6 +3,27 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
+
+import torchvision
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from VGG_model import VGG
+import torch
+import torch.nn as nn
+from tqdm import trange
+
+
+learning_rate = 0.001
+
+# CUDA 사용 여부 확인 후 디바이스 설정
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+# VGG 모델 인스턴스화 및 디바이스로 이동
+model = VGG(base_dim=64).to(device) # 첫 번째 컨볼루션 레이어가 출력하는 채널 수가 64
+
+
+
 # 데이터 변환
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -22,7 +43,7 @@ total = 0
 model.eval()
 
 # 인퍼런스 모드를 위해 no_grad 해줍니다.
-with torch.no_grad():  # 학습하지 않는다 추론하는 거니까 필요 없다 
+with torch.no_grad():  # 학습하지 않는다 
     # 테스트로더에서 이미지와 정답 불러오기 
     for image, label in test_loader:
     
