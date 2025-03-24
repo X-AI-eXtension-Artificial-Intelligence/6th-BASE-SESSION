@@ -4,6 +4,7 @@
 # Batch Normalization 추가 → 학습 안정성 향상 및 빠른 수렴
 # Global Average Pooling(GAP) 적용 → 연산량 감소 및 일반화 성능 향상
 # Fully Connected Layer 축소 → 4096 → 512 뉴런으로 파라미터 수 감소
+# Dropout 방식 단순화 → 불필요한 드롭아웃 제거
 # Softmax 제거 → CrossEntropyLoss에서 자동 적용됨
 
 
