@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader
 
 from dataset import data_transform
-from vgg16 import VGG16
+from asymmetric_vgg16 import VGG16
 import torch
 
 def evaluate_model(setting_config: dict):
