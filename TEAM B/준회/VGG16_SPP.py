@@ -59,33 +59,51 @@ def conv3_block(in_dim, out_dim):
     )
     return model
 
-## define VGG16
-class VGG16(nn.Module):
+## SPP 레이어 정의
+class SPPLayer(nn.Module):
+    def __init__(self, levels):
+        super(SPPLayer, self).__init__()
+        self.levels = levels  ## 풀링 크기 수준(예: 1x1, 2x2, 4x4)
 
-    ## 모델 예측에 사용할 데이터 CIFAR 10의 클래스 개수가 10
-    def __init__(self, base_dim, num_classes = 10):
-        super(VGG16, self).__init__()
+    def forward(self, x):
+        bs, c, h, w = x.size()  ## 배치크기, 채널, 높이, 너비
+        spp_out = []
+
+        for level in self.levels:
+            kernel_size = (h // level, w // level)
+            stride = (h // level, w // level)
+
+            ## 각 level에 맞는 출력 크기로 adaptive pooling 적용
+            pooling = F.adaptive_max_pool2d(x, output_size=(level, level))
+
+            ## 결과를 1차원으로 펼쳐서 리스트에 추가
+            spp_out.append(pooling.view(bs, -1))
+            
+        ## 모든 level의 풀링 결과를 이어붙임
+        return torch.cat(spp_out, dim=1)
+        
+## VGG16 모델에 SPPNet 구조를 결합
+class VGG16_SPP(nn.Module):
+    def __init__(self, base_dim, num_classes=10):
+        super(VGG16_SPP, self).__init__()
         self.feature = nn.Sequential(
-            conv2_block(3, base_dim), ## RGB -> 64채널
-            conv2_block(base_dim, base_dim), ## 64 -> 128
-            conv3_block(base_dim, 4 * base_dim), ## 128 -> 256
-            conv3_block(4 * base_dim, 8 * base_dim), ## 256 -> 512
-            conv3_block(8 * base_dim, 8 * base_dim) ## 512 -> 512
+            conv2_block(3, base_dim),
+            conv2_block(base_dim, base_dim),
+            conv3_block(base_dim, 4 * base_dim),
+            conv3_block(4 * base_dim, 8 * base_dim),
+            conv3_block(8 * base_dim, 8 * base_dim),
         )
 
+        self.spp = SPPLayer(levels=[1, 2, 4])  # 다양한 크기의 pooling 수행
         self.fc_layer = nn.Sequential(
-            ## CIFAR10은 크기가 32 X 32 이므로
-            nn.Linear(8 * base_dim * 7 * 7, 8192),
+            nn.Linear((1**2 + 2**2 + 4**2) * 8 * base_dim, 4096),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(8192, 2000), ## 8192 -> 2000
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(2000, num_classes) ## 2000 -> 10
+            nn.Linear(4096, num_classes)
         )
-    
+
     def forward(self, x):
         x = self.feature(x)
-        x = x.view(x.size(0), -1)
+        x = self.spp(x)
         x = self.fc_layer(x)
         return x
