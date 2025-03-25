@@ -1,14 +1,17 @@
 import torch
 import torch.nn as nn
 
-# conv_2_block
+# conv_2_block -> 조금의 경량화 진행
+# SiLU
 # 2개의 Conv 레이어로 구성된 블록을 정의
 def conv_2_block(in_dim,out_dim):
     model = nn.Sequential(
         nn.Conv2d(in_dim,out_dim,kernel_size=3,padding=1), # 첫 번째 Conv2d 레이어: 입력 채널(in_dim)에서 출력 채널(out_dim)로 변환, 커널 크기 3, padding 1
-        nn.ReLU(), # ReLU (비선형 활성화)
+        nn.GroupNorm(8, out_dim),  # 가벼운 GroupNorm 적용
+        nn.SiLU(),  # ReLU → SiLU (Swish)
         nn.Conv2d(out_dim,out_dim,kernel_size=3,padding=1),  # 두 번째 Conv2d 레이어: 출력 채널이 다시 동일하게 out_dim
-        nn.ReLU(), # ReLU (비선형 활성화)
+        nn.GroupNorm(8, out_dim),
+        nn.SiLU(),
         nn.MaxPool2d(2,2) # 2x2 크기의 풀링
     )
     return model
