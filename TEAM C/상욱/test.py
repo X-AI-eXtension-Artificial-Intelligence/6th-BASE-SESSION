@@ -2,7 +2,7 @@ import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from model import VGG
+from model_update import VGG
 import torch.nn as nn
 import torch
 
@@ -22,12 +22,12 @@ transform = transforms.Compose(
 cifar10_test = datasets.CIFAR10(root="../Data/", train=False, transform=transform, target_transform=None, download=True)
 
 #test_loader 정의
-test_loader = DataLoader(cifar10_test, batch_size=batch_size)
+test_loader = DataLoader(cifar10_test, batch_size=batch_size, num_workers=2)
 
 model = VGG(base_dim=64).to(device)
 
 #훈련된 모델을 load해야됨
-model.load_state_dict(torch.load('vgg_model.pth'))
+model.load_state_dict(torch.load('vgg_model_update.pth'))
 
 # 맞은 개수, 전체 개수를 저장할 변수를 지정합니다.
 correct = 0
