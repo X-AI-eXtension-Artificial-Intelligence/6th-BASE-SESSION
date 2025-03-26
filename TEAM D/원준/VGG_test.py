@@ -42,8 +42,8 @@ total = 0
 
 model.eval()
 
-# 인퍼런스 모드를 위해 no_grad 해줍니다.
-with torch.no_grad():  # 학습하지 않는다 
+# 인퍼런스 모드를 위해 no_grad
+with torch.no_grad():  # 학습 x 
     # 테스트로더에서 이미지와 정답 불러오기 
     for image, label in test_loader:
     
