@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from tqdm import trange  # 학습 진행 과정 시각적으로 보여주는 라이브러리
+from tqdm import trange
 
 # 학습률 설정
 learning_rate = 0.001
