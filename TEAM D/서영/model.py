@@ -2,9 +2,6 @@ import torch
 import torch.nn as nn
 from tqdm import trange 
 
-learning_rate = 0.001
-
-import torch.nn as nn
 
 def conv_2_block(in_dim, out_dim):
     """
@@ -41,6 +38,45 @@ def conv_3_block(in_dim, out_dim):
         nn.MaxPool2d(kernel_size=2, stride=2)  # 2x2 맥스 풀링 (특성 맵 크기 절반 축소)
     )
     return model
+
+# BatchNorm이 들어간 conv_2_block 정의
+def conv_2_block_bn(in_dim, out_dim):
+    model = nn.Sequential(
+        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
+        nn.BatchNorm2d(out_dim),  # 배치 정규화 추가
+        nn.ReLU(),
+        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
+        nn.BatchNorm2d(out_dim),  # 배치 정규화 추가
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=2, stride=2)
+    )
+    return model
+
+# Conv 레이어 사이에 Dropout 삽입
+def conv_2_block_dropout(in_dim, out_dim):
+    model = nn.Sequential(
+        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Dropout(0.2),  # 20% 확률로 뉴런 무시
+        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
+        nn.ReLU(),
+        nn.Dropout(0.2),
+        nn.MaxPool2d(kernel_size=2, stride=2)
+    )
+    return model 
+
+
+# LeakyReLU 사용한 Conv 블록
+def conv_2_block_leaky(in_dim, out_dim):
+    model =  nn.Sequential(
+        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
+        nn.LeakyReLU(0.1),  # ReLU 대신 LeakyReLU
+        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
+        nn.LeakyReLU(0.1),
+        nn.MaxPool2d(kernel_size=2, stride=2)
+    )
+    return model 
+
 
 class VGG(nn.Module):
     """
@@ -99,8 +135,6 @@ Original file is located at
 # 1. 레이어 구성 변경
 """
 
-import torch.nn as nn
-
 # 간단한 VGG 구조: conv_2_block만 사용하고 블록 수를 줄임
 class VGG_Simple(nn.Module):
     def __init__(self, base_dim=64, num_classes=10):
@@ -131,17 +165,6 @@ class VGG_Simple(nn.Module):
 #  2. BatchNorm 추가된 VGG
 """
 
-# BatchNorm이 들어간 conv_2_block 정의
-def conv_2_block_bn(in_dim, out_dim):
-    return nn.Sequential(
-        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
-        nn.BatchNorm2d(out_dim),  # 배치 정규화 추가
-        nn.ReLU(),
-        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
-        nn.BatchNorm2d(out_dim),  # 배치 정규화 추가
-        nn.ReLU(),
-        nn.MaxPool2d(kernel_size=2, stride=2)
-    )
 
 # BatchNorm이 포함된 VGG 구조
 class VGG_BatchNorm(nn.Module):
@@ -172,17 +195,6 @@ class VGG_BatchNorm(nn.Module):
 # 3. Dropout 추가 (Convolution 사이에)
 """
 
-# Conv 레이어 사이에 Dropout 삽입
-def conv_2_block_dropout(in_dim, out_dim):
-    return nn.Sequential(
-        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.Dropout(0.2),  # 20% 확률로 뉴런 무시
-        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.MaxPool2d(kernel_size=2, stride=2)
-    )
 
 # Dropout이 포함된 VGG 구조
 class VGG_Dropout(nn.Module):
@@ -212,16 +224,6 @@ class VGG_Dropout(nn.Module):
 
 # 4. ReLU → LeakyReLU 변경
 """
-
-# LeakyReLU 사용한 Conv 블록
-def conv_2_block_leaky(in_dim, out_dim):
-    return nn.Sequential(
-        nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1),
-        nn.LeakyReLU(0.1),  # ReLU 대신 LeakyReLU
-        nn.Conv2d(out_dim, out_dim, kernel_size=3, padding=1),
-        nn.LeakyReLU(0.1),
-        nn.MaxPool2d(kernel_size=2, stride=2)
-    )
 
 # LeakyReLU가 포함된 VGG 구조
 class VGG_Leaky(nn.Module):
