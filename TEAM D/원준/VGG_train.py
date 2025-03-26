@@ -8,7 +8,7 @@ import torch.nn as nn
 from tqdm import trange
 
 
-learning_rate = 0.1
+learning_rate = 0.001
 
 # CUDA 사용 여부 확인 후 디바이스 설정
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
