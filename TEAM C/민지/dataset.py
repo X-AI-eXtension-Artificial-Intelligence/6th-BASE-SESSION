@@ -9,7 +9,7 @@ def data_transform(train=True):
     transform = transforms.Compose([transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     os.makedirs('./dataset/', exist_ok=True)
-    data_set = datasets.CIFAR100(root="./dataset/", train=train, transform=transform, download=True)
+    data_set = datasets.CIFAR10(root="./dataset/", train=train, transform=transform, download=True)
     return data_set
 
 # 이미지 확인용

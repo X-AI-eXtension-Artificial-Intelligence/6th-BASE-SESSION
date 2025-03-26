@@ -13,7 +13,7 @@ def evaluate_model(setting_config: dict):
     test_loader = DataLoader(test_set, batch_size=batch_size)
 
     # model load
-    model = VGG16(base_dim=64, num_classes=100).to(device)
+    model = VGG16(base_dim=64, num_classes=10).to(device)
     model.load_state_dict(torch.load(model_path, weights_only=True))
 
     # eval
@@ -37,10 +37,10 @@ def evaluate_model(setting_config: dict):
 
 if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
-    model_path = "./model/vgg16_epoch100.pth" #'./model/vgg16_10.pth'
+    model_path = "./model/vgg16_epoch100_vanila.pth" #'./model/vgg16_epoch100_vanila.pth'
 
     setting_config = {
-        "batch_size": 4,
+        "batch_size": 100,
         "device": device,
         "model_path": model_path}
 

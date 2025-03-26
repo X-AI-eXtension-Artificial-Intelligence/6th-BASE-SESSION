@@ -25,7 +25,7 @@ def train_model(setting_config: dict):
 
 
     # Train
-    model = VGG16(base_dim=64, num_classes=100).to(device)
+    model = VGG16(base_dim=64, num_classes=10).to(device)
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -54,10 +54,10 @@ def train_model(setting_config: dict):
 
 if __name__ == '__main__':
     setting_config = {
-        "batch_size": 4,
-        "learning_rate": 0.001,
+        "batch_size": 100,
+        "learning_rate": 0.0001,
         "num_epoch": 100,
         "device": torch.device("cuda" if torch.cuda.is_available() else 'cpu'),
-        "save_model_path": "./model/vgg16_epoch100.pth"
+        "save_model_path": "./model/vgg16_epoch100_vanila.pth"
     }
     train_model(setting_config)
