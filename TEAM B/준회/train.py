@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 import torchvision
 import torchvision.datasets as datasets
@@ -9,28 +9,21 @@ import torchvision.transforms as transforms
 
 import matplotlib.pyplot as plt
 from tqdm import trange
-from VGG16 import VGG16
+from VGG16_SPP import VGG16_SPP
 
 
 ## 데이터셋, 데이터 로더 준비하는 함수
-def prepare_data(batch_size=16, split_ratio=0.8):
+def prepare_data(batch_size=16):
     
     ## 데이터 변환
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),  # 이미지 크기 통일
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    )
 
-    ## ImageFolder 데이터셋 로드
-    dataset = datasets.ImageFolder(root="./VGG16/data", transform=transform)
-
-    ## 데이터셋 크기 정의
-    train_size = int(split_ratio * len(dataset))  # 학습 데이터 크기 (80%)
-    test_size = len(dataset) - train_size         # 테스트 데이터 크기 (20%)
-
-    ## 데이터셋 분리
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    ## CIFAR10 데이터셋
+    train_dataset = datasets.CIFAR10(root="./data/", train=True, transform=transform, download=True)
+    test_dataset = datasets.CIFAR10(root="./data/", train=False, transform=transform, download=True)
 
     ## 데이터 로더 정의
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
@@ -96,22 +89,21 @@ def evaluate_model(model, test_loader, device):
 
 if __name__ == '__main__':
     ## 장치 설정
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     ## 데이터 준비
-    batch_size = 32
-    split_ratio=0.8
-    train_loader, test_loader = prepare_data(batch_size=batch_size, split_ratio=split_ratio)
+    batch_size = 64
+    train_loader, test_loader = prepare_data(batch_size=batch_size)
 
     ## 모델 초기화
-    model = VGG16(base_dim = 64)
+    model = VGG16_SPP(base_dim=64)
 
     ## 모델 학습
-    num_epochs = 40
-    model, loss_arr = train_model(model, train_loader, device, num_epochs=num_epochs, lr=0.002)
+    num_epochs = 20
+    model, loss_arr = train_model(model, train_loader, device, num_epochs=num_epochs, lr=0.0002)
 
     ## 모델 저장
-    save_model(model, path="./VGG16/vgg16_animals_10.pth")
+    save_model(model, path="vgg16_cifar10.pth")
 
     ## 모델 평가
     evaluate_model(model, test_loader, device)

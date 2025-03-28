@@ -15,11 +15,9 @@ from tqdm import trange
 
 import matplotlib.pyplot as plt
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'  # CUDA 사용 가능 여부 확인하여 device 설정
+ 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # CUDA 사용 가능 여부 확인하여 device 설정용
 
-torch.manual_seed(777)  # 랜덤 시드 고정 (재현 가능성 확보)
-if device =='cuda':
-    torch.cuda.manual_seed_all(777)
 
 
 # 배치 사이즈, 학습률, 에포크 지정
@@ -33,7 +31,7 @@ cfg = {
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'], # 10 + 3 = vgg 13
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'], #13 + 3 = vgg 16
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'], # 16 +3 =vgg 19
-    'custom' : [64,64,64,'M',128,128,128,'M',256,256,256,'M']
+    'custom1' : [64,64,64,'M',128,128,128,'M',256,256,256,'M', 512, 512, 512, 'M', 1020, 1024, 1024, 'M']  # 숫자만큼 노드 수를 가지는 layer를 의미 
 }
 
 
@@ -47,12 +45,15 @@ train_loader = torch.utils.data.DataLoader(  # 대용량 데이터를 효율적�
 
 
 
-vgg19= vgg.VGG(vgg.make_layers(cfg['E']), 10, True).to(device)  # E 경우의 vgg19 구현, 분류클래스 10개, 가중치 초기화 실행  
+# vgg19= vgg.VGG(vgg.make_layers(cfg['E']), 10, True).to(device)  # E 경우의 vgg19 구현, 분류클래스 10개, 가중치 초기화 실행  
+# transformed_model = vgg.VGG(vgg.make_layers(cfg['custom1'], batch_norm=True), 10, True).to(device)
+transformed_without_BN_model = vgg.VGG(vgg.make_layers(cfg['custom1'], batch_norm=False), 10, True).to(device)
 
 
 
 criterion = nn.CrossEntropyLoss().to(device)
-optimizer = torch.optim.SGD(vgg19.parameters(), lr = 0.005, momentum=0.9)
+# optimizer = torch.optim.SGD(vgg19.parameters(), lr = 0.005, momentum=0.9)
+optimizer = torch.optim.SGD(transformed_without_BN_model.parameters(), lr = 0.005, momentum=0.9)
 
 lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.9)  # 학습률을 조금 씩 줄이기 위한 코드 
 # 5회마다 학습률에 0.9씩 곱해주세요 
@@ -102,7 +103,9 @@ for i in trange(num_epoch):  # 50 epoch 학습
         labels = label.to(device)
 
         optimizer.zero_grad()  # 이전 gradient 초기화
-        output = vgg19.forward(inputs)  # 순전파
+        # output = vgg19.forward(inputs)  # 순전파
+        # output = transformed_model.forward(inputs)
+        output = transformed_without_BN_model(inputs)
         loss = criterion(output, labels)  # 손실함수 값 
         loss.backward()  # 역전파
         optimizer.step()  # 가중치 갱신 
@@ -115,11 +118,14 @@ for i in trange(num_epoch):  # 50 epoch 학습
 # loss curve 그리기
 plt.plot(loss_arr)
 # loss curve 그래프 이미지 저장
-plt.savefig('CIFAR10_VGG19_Loss_curve.png')
+plt.savefig('CIFAR10_transformed_without_BN_model_Loss_curve.png')
 plt.show()
 
 # model 가중치 저장
-torch.save(vgg19.state_dict(), "VGG19_model.pth") 
+# torch.save(vgg19.state_dict(), "transformed_model.pth") 
+torch.save(transformed_without_BN_model.state_dict(), "transformed_without_BN_model.pth") 
+
+
 
 
 ''' 가중치만 저장

@@ -3,12 +3,12 @@
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-from VGG16 import VGG16
+from VGG16_SPP import VGG16_SPP
 
 
 ## 학습시킨 모델 불러오는 함수
 def load_model(model_path, device):
-    model = VGG16(base_dim=64)
+    model = VGG16_SPP(base_dim=64)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model = model.to(device)
     model.eval()
@@ -18,7 +18,6 @@ def load_model(model_path, device):
 ## 이미지 파일 전처리 함수
 def preprocess_image(image_path):
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),  ## CIFAR-10 크기에 맞게 조정
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
     ])
@@ -42,11 +41,11 @@ if __name__ == '__main__':
                'gatto', 'mucca', 'pecora', 'ragno', 'scoiattolo')
 
     ## 모델 로드
-    model_path = "./VGG16/vgg16_animals_10.pth"  ## 저장된 모델 경로
+    model_path = "vgg16_animals_10.pth"  ## 저장된 모델 경로
     model = load_model(model_path, device)
 
     ## 이미지 전처리
-    image_path = "./VGG16/코끼리사진.jpg"  ## 테스트할 이미지 경로
+    image_path = "코끼리사진.jpg"  ## 테스트할 이미지 경로
     image_tensor = preprocess_image(image_path)
 
     ## 이미지 예측

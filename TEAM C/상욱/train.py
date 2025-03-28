@@ -2,7 +2,8 @@ import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from model import VGG
+#from model import VGG
+from model_update import VGG
 import torch.nn as nn
 import torch
 
@@ -25,20 +26,26 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # 이미지 데이터를 텐서로 변환
 # transforms.Normalize(mean, std)
 # channel = 3
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+transform = transforms.Compose([
+    transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),  # 랜덤 크롭 후 리사이즈
+    transforms.RandomHorizontalFlip(p=0.5),  # 50% 확률로 좌우 반전
+    transforms.RandomRotation(degrees=10),  # 최대 ±10도 회전
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # 색상 변화
+    transforms.ToTensor(),  # 텐서 변환
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),  # 정규화
+    transforms.RandomErasing(p=0.2, scale=(0.02, 0.2)),  # 일부 픽셀 제거 (Cutout)
+])
 
 # CIFAR10 TRAIN 데이터 정의
 cifar10_train = datasets.CIFAR10(root="../Data/", train=True, transform=transform, target_transform=None, download=True)
 
 
 # train_loader 정의
-train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True) # num_workers를 통해 더 빨리 할 수 있음
+train_loader = DataLoader(cifar10_train, batch_size=batch_size, shuffle=True, num_workers = 2) # num_workers를 통해 더 빨리 할 수 있음
 
 # device 설정
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+print(device)
 # VGG 클래스를 인스턴스화
 model = VGG(base_dim=64).to(device)
 
@@ -64,5 +71,5 @@ for i in range(num_epoch):
         loss_arr.append(loss.cpu().detach().numpy())
 
 # 훈련이 끝난 모델 save
-torch.save(model.state_dict(), 'vgg_model.pth')
-print("Model saved as 'vgg_model.pth'")
+torch.save(model.state_dict(), 'vgg_model_update.pth')
+print("Model saved as 'vgg_model_update.pth'")
