@@ -20,11 +20,18 @@ cfg = {
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'], # 10 + 3 = vgg 13
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'], #13 + 3 = vgg 16
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'], # 16 +3 =vgg 19
-    'custom' : [64,64,64,'M',128,128,128,'M',256,256,256,'M']
+    'custom1' : [64,64,64,'M',128,128,128,'M',256,256,256,'M', 512, 512, 512, 'M', 1020, 1024, 1024, 'M']
 }
-vgg19 = vgg.VGG(vgg.make_layers(cfg['E']), 10, True).to(device)  # 모델 구조 잡고
-vgg19.load_state_dict(torch.load("VGG19_model.pth"))  # 학습된 가중치 불러옴 
+# vgg19 = vgg.VGG(vgg.make_layers(cfg['E']), 10, True).to(device)  # 모델 구조 잡고
+# vgg19.load_state_dict(torch.load("VGG19_model.pth"))  # 학습된 가중치 불러옴 
+# transformed_model = vgg.VGG(vgg.make_layers(cfg['custom1'], batch_norm=True), 10, True).to(device)
+# transformed_model.load_state_dict(torch.load("transformed_model.pth"))
+
+transformed_without_BN_model = vgg.VGG(vgg.make_layers(cfg['custom1'], batch_norm=False), 10, True).to(device)
+transformed_without_BN_model.load_state_dict(torch.load("transformed_without_BN_model.pth"))
+
 # vgg19.load_state_dict(torch.load("./VGG19_model.pth", map_location=torch.device('cpu'))) # GPU로 학습한 가중치를 CPU환경에서 불러올 수 있게 
+
 
 
 
@@ -33,13 +40,15 @@ vgg19.load_state_dict(torch.load("VGG19_model.pth"))  # 학습된 가중치 불�
 
 correct = 0
 total = 0
-with torch.no_grad():
+
+transformed_model.eval()  # 드롭아웃, BN 비활성화. make_layers에서 BN을 True 해줬는가? 
+with torch.no_grad():  #  gradient 계산 비활성화. 당연히 역전파도 비활성화 
     for data in test_loader:
         images, labels = data  # 데이터를 이미지와 라벨로 분리 
         images = images.to(device)
         labels = labels.to(device)
-        outputs = vgg19(images)  # 모델에 이미지 통과. 결과는 배치x클래스 수 모양의 중첩 리스트. 
-        
+        # outputs = vgg19(images)  # 모델에 이미지 통과. 결과는 배치x클래스 수 모양의 중첩 리스트. 
+        outputs = transformed_model(images)
         _, predicted = torch.max(outputs.data, 1)  # 확률이 가장 높은 1개 predicted에 저장 
         
         total += labels.size(0)  # 전체 샘플 수 증가

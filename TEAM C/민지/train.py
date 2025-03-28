@@ -4,7 +4,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from dataset import data_transform
-from vgg16 import VGG16
+from asymmetric_vgg16 import VGG16
 import torch
 import torch.nn as nn
 
@@ -21,8 +21,6 @@ def train_model(setting_config: dict):
 
     # DataLoader : 미니배치(batch) 단위로 데이터를 제공
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size)
-
 
     # Train
     model = VGG16(base_dim=64, num_classes=100).to(device)

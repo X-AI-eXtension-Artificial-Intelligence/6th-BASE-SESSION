@@ -30,7 +30,8 @@ class VGG(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))  # 입력을 7x7로 고정하는 pooling layer 
 
         self.classifier = nn.Sequential(  # FC layer. 최종 분류기 
-            nn.Linear(512 * 7 * 7, 4096),  # 
+            # nn.Linear(512 * 7 * 7, 4096),  # oroginal 
+            nn.Linear(1024 * 7 * 7, 4096),  # transformed_model 
             nn.ReLU(True),
             nn.Dropout(),
             nn.Linear(4096, 4096),
