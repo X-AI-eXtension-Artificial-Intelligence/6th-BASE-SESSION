@@ -18,7 +18,7 @@ from model import Unet
 import joblib
   
 kmeans = joblib.load('kmeans_model.pkl')
-
+ 
 
 def train(model, loader, optimizer, criterion, num_epochs, device):
     model.train()  # 모델을 학습 모드로 설정
