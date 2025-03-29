@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 
 ## 데이터 로더를 구현하기
+'여기에 있는 3개의 함수는 무조건 들어간다'
+'train에서 다 쓰인다다'
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data_dir, transform=None):
         self.data_dir = data_dir
