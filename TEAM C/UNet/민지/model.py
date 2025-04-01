@@ -51,10 +51,8 @@ class UNet(nn.Module):
         self.dec_1_1 = CBR2d(128, 64)
         self.dec_1_2 = CBR2d(64, 64)
 
-        self.out_conv = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=out_channel, kernel_size=1),
-            nn.Sigmoid()
-        )
+        self.out_conv = nn.Conv2d(in_channels=64, out_channels=out_channel, kernel_size=1)
+    
 
     def forward(self, x):
         enc_1_1 = self.enc_1_1(x)
