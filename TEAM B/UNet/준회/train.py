@@ -1,60 +1,54 @@
-import os
-from PIL import Image
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
+import numpy as np
+from tqdm import tqdm
 
-from tqdm.notebook import tqdm
-from data_loader import get_loader  # 수정된 데이터 로더를 사용합니다.
-from model import Unet
-import joblib
-  
-kmeans = joblib.load('kmeans_model.pkl')
+from data_loader import get_loader
+from model import UNet
 
 
-def train(model, loader, optimizer, criterion, num_epochs, device):
-    model.train()  # 모델을 학습 모드로 설정
+def train(model, loader, criterion, optimizer, device, num_epochs=10):
+    model.train()
     for epoch in range(num_epochs):
-        total_loss = 0
-        with tqdm(total=len(loader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
-            for images, masks in loader:
-                images, masks = images.to(device), masks.to(device)
+        running_loss = 0.0
+        for images, masks in tqdm(loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+            images, masks = images.to(device), masks.to(device)
 
-                optimizer.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, masks)
-                loss.backward()
-                optimizer.step()
+            optimizer.zero_grad()
+            outputs = model(images)
 
-                total_loss += loss.item()
-                pbar.update(1)  # 진행률 바 업데이트
+            # 출력 크기를 마스크 크기에 맞춤 (일치하지 않으면 오류 발생)
+            outputs = torch.nn.functional.interpolate(
+                outputs, size=masks.shape[1:], mode='bilinear', align_corners=False
+            )
 
-        avg_loss = total_loss / len(loader)
-        print(f'Average Loss: {avg_loss:.4f}')
+            loss = criterion(outputs, masks)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+        print(f"Epoch {epoch+1}, Loss: {running_loss/len(loader):.4f}")
 
     # 모델 저장
-    torch.save(model.state_dict(), 'unet_model.pth')
-    print("Model saved successfully.")
+    torch.save(model.state_dict(), 'unet_custom.pth')
+    print("Model saved to unet_custom.pth")
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = Unet().to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.002)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 데이터 로더 설정
-    image_dir = '../XAI/Unet/dataset/train'  # 이미지 디렉토리 경로 설정
-    train_loader = get_loader(image_dir, kmeans, batch_size=4)
-    num_epochs = 25
-    train(model, train_loader, optimizer, criterion, num_epochs, device)
+    # 데이터 로더
+    loader = get_loader(batch_size=4, num_workers=0)
+
+    # 모델
+    model = UNet().to(device)
+
+    # 클래스 수는 10개
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    # 학습 시작
+    train(model, loader, criterion, optimizer, device, num_epochs=2)
 
 if __name__ == '__main__':
     main()

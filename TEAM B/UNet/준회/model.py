@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 
 ## U-net 네트워크 구축
-class Unet(nn.Module):
+class UNet(nn.Module):
     def __init__(self):
-        super(Unet, self).__init__()  
+        super(UNet, self).__init__()  
 
 ## Convolution, Batch Nomalization, ReLU, 2 Dimension
 ## 패딩을 1로 설정해주어 피쳐맵이 작아지지 않도록 설정
