@@ -1,68 +1,84 @@
+# eval.py
 import torch
-import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from data_loader import CityscapeDataset  # 데이터 로더
-from model import Unet  # 모델
-import joblib
-  
+from data_loader import get_loader  # 같은 방식의 loader 사용
+from model import UNet
+
+
+def compute_iou(pred, target, num_classes):
+    ious = []
+    for cls in range(num_classes):
+        pred_inds = (pred == cls)
+        target_inds = (target == cls)
+        intersection = (pred_inds & target_inds).sum().item()
+        union = (pred_inds | target_inds).sum().item()
+        if union == 0:
+            ious.append(float('nan'))
+        else:
+            ious.append(intersection / union)
+    return ious
+
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    # 모델 경로 설정
-    model_name = 'unet_model.pth'
-    
-    num_classes = 10  # 클래스 수 설정
-    model = Unet().to(device)
-    model.load_state_dict(torch.load(model_name))
-    kmeans = joblib.load('kmeans_model.pkl')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 데이터셋 및 데이터 로더 설정
-    val_dir = '../XAI/Unet/dataset/val'  # 검증 데이터셋 경로
-    test_batch_size = 8
-    dataset = CityscapeDataset(val_dir, kmeans)  # 레이블 모델을 num_classes로 대체
-    data_loader = DataLoader(dataset, batch_size=test_batch_size)
+    # 모델 불러오기
+    model = UNet().to(device)
+    model.load_state_dict(torch.load("unet_custom.pth", map_location=device))
+    model.eval()
 
-    X, Y = next(iter(data_loader))
-    X, Y = X.to(device), Y.to(device)
-    Y_pred = model(X)
-    Y_pred = torch.argmax(Y_pred, dim=1)
+    # 평가 데이터셋 로더
+    val_loader = get_loader(batch_size=4, shuffle=False, num_workers=0)
 
-    # 이미지의 변환을 역으로 적용
-    inverse_transform = transforms.Compose([
-        transforms.Normalize((-0.485/0.229, -0.456/0.224, -0.406/0.225), (1/0.229, 1/0.224, 1/0.225))
-    ])
+    inverse_transform = transforms.Normalize(
+        mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225],
+        std=[1 / 0.229, 1 / 0.224, 1 / 0.225]
+    )
 
-    fig, axes = plt.subplots(test_batch_size, 3, figsize=(15, 5*test_batch_size))
-    iou_scores = []
+    all_ious = []
 
-    for i in range(test_batch_size):
-        landscape = inverse_transform(X[i]).permute(1, 2, 0).cpu().detach().numpy()
-        label_class = Y[i].cpu().detach().numpy()
-        label_class_predicted = Y_pred[i].cpu().detach().numpy()
+    with torch.no_grad():
+        for batch_idx, (images, masks) in enumerate(val_loader):
+            images, masks = images.to(device), masks.to(device)
+            outputs = model(images)
+            preds = torch.argmax(outputs, dim=1)
 
-        # IOU 점수 계산
-        intersection = np.logical_and(label_class, label_class_predicted)
-        union = np.logical_or(label_class, label_class_predicted)
-        iou_score = np.sum(intersection) / np.sum(union)
-        iou_scores.append(iou_score)
+            # 시각화 (첫 배치만)
+            if batch_idx == 0:
+                fig, axes = plt.subplots(images.size(0), 3, figsize=(12, 4 * images.size(0)))
+                for i in range(images.size(0)):
+                    img = inverse_transform(images[i]).permute(1, 2, 0).cpu().numpy()
+                    mask = masks[i].cpu().numpy()
+                    pred = preds[i].cpu().numpy()
 
-        axes[i, 0].imshow(landscape)
-        axes[i, 0].set_title("Landscape")
-        axes[i, 1].imshow(label_class)
-        axes[i, 1].set_title("Label Class")
-        axes[i, 2].imshow(label_class_predicted)
-        axes[i, 2].set_title("Label Class - Predicted")
-        axes[i, 0].axis('off')
-        axes[i, 1].axis('off')
-        axes[i, 2].axis('off')
+                    axes[i, 0].imshow(img)
+                    axes[i, 0].set_title("Input")
+                    axes[i, 1].imshow(mask)
+                    axes[i, 1].set_title("Ground Truth")
+                    axes[i, 2].imshow(pred)
+                    axes[i, 2].set_title("Prediction")
 
-    plt.show()
+                    for j in range(3):
+                        axes[i, j].axis("off")
+                plt.tight_layout()
+                plt.show()
 
-    print(f'Average IoU Score: {sum(iou_scores) / len(iou_scores):.4f}')
+            for i in range(images.size(0)):
+                iou = compute_iou(preds[i], masks[i], num_classes=10)
+                all_ious.append(iou)
+
+    all_ious = np.array(all_ious)
+    mean_iou_per_class = np.nanmean(all_ious, axis=0)
+    mean_iou = np.nanmean(mean_iou_per_class)
+
+    print(f"\n📊 Per-Class IoU:")
+    for idx, iou in enumerate(mean_iou_per_class):
+        print(f"  Class {idx}: {iou:.4f}")
+    print(f"\n✅ Mean IoU: {mean_iou:.4f}")
+
 
 if __name__ == '__main__':
     main()
