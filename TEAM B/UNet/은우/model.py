@@ -1,83 +1,69 @@
-import os
-import numpy as np
-
 import torch
 import torch.nn as nn
 
-## 네트워크 구축하기
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
 
+        # Conv -> BatchNorm -> ReLU
         def CBR2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=True):
-            layers = []
-            #conv 레이어 정의 
-            layers += [nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                 kernel_size=kernel_size, stride=stride, padding=padding,
-                                 bias=bias)]
-            #batch norm 정의
-            layers += [nn.BatchNorm2d(num_features=out_channels)]
-            #relu 정의
-            layers += [nn.ReLU()]
+            return nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU()
+            )
 
-            cbr = nn.Sequential(*layers)
+        # 입력에서 중요한 특징을 추출하며 점점 작게
+        # 단계마다 2개의 convolution 블록을 거친 후 max pooling 수행
 
-            return cbr
+        # 채널 수 1 -> 64 
+        self.enc1_1 = CBR2d(1, 64)
+        self.enc1_2 = CBR2d(64, 64)
+        self.pool1 = nn.MaxPool2d(2)  
 
-        # Contracting path
-        self.enc1_1 = CBR2d(in_channels=1, out_channels=64) #인코더의 첫번째 스테이지 
-        self.enc1_2 = CBR2d(in_channels=64, out_channels=64)
+        # 64 -> 128
+        self.enc2_1 = CBR2d(64, 128)
+        self.enc2_2 = CBR2d(128, 128)
+        self.pool2 = nn.MaxPool2d(2)
 
-        self.pool1 = nn.MaxPool2d(kernel_size=2)
-        #인코더 두번째 
-        self.enc2_1 = CBR2d(in_channels=64, out_channels=128)
-        self.enc2_2 = CBR2d(in_channels=128, out_channels=128)
-        #맥스풀링
-        self.pool2 = nn.MaxPool2d(kernel_size=2)
+        # 128 -> 256
+        self.enc3_1 = CBR2d(128, 256)
+        self.enc3_2 = CBR2d(256, 256)
+        self.pool3 = nn.MaxPool2d(2)
 
-        self.enc3_1 = CBR2d(in_channels=128, out_channels=256)
-        self.enc3_2 = CBR2d(in_channels=256, out_channels=256)
+        # 256 -> 512
+        self.enc4_1 = CBR2d(256, 512)
+        self.enc4_2 = CBR2d(512, 512)
+        self.pool4 = nn.MaxPool2d(2)
 
-        self.pool3 = nn.MaxPool2d(kernel_size=2)
+        self.enc5_1 = CBR2d(512, 1024)
 
-        self.enc4_1 = CBR2d(in_channels=256, out_channels=512)
-        self.enc4_2 = CBR2d(in_channels=512, out_channels=512)
+        #디코더
+        #ConvTranspose2d는 업샘플링을 수행
 
-        self.pool4 = nn.MaxPool2d(kernel_size=2)
+        self.dec5_1 = CBR2d(1024, 512)           
+        self.unpool4 = nn.ConvTranspose2d(512, 512, 2, 2)
 
-        self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
+        self.dec4_2 = CBR2d(1024, 512)               
+        self.dec4_1 = CBR2d(512, 256)
+        self.unpool3 = nn.ConvTranspose2d(256, 256, 2, 2)
 
-        # Expansive path
-        self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)
-        #인코더랑 반대로 
+        self.dec3_2 = CBR2d(512, 256)              
+        self.dec3_1 = CBR2d(256, 128)
+        self.unpool2 = nn.ConvTranspose2d(128, 128, 2, 2)
 
-        self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512,
-                                          kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec2_2 = CBR2d(256, 128)               
+        self.dec2_1 = CBR2d(128, 64)
+        self.unpool1 = nn.ConvTranspose2d(64, 64, 2, 2)
 
-        self.dec4_2 = CBR2d(in_channels=2 * 512, out_channels=512) #들어가는 채널 512아니고 1024
-        self.dec4_1 = CBR2d(in_channels=512, out_channels=256)
-        #인코더랑 페어맞춰서 
-        self.unpool3 = nn.ConvTranspose2d(in_channels=256, out_channels=256,
-                                          kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec1_2 = CBR2d(128, 64)               
+        self.dec1_1 = CBR2d(64, 64)
 
-        self.dec3_2 = CBR2d(in_channels=2 * 256, out_channels=256)
-        self.dec3_1 = CBR2d(in_channels=256, out_channels=128)
+        # 채널 수 64 -> 1
+        self.fc = nn.Conv2d(64, 1, kernel_size=1)
 
-        self.unpool2 = nn.ConvTranspose2d(in_channels=128, out_channels=128,
-                                          kernel_size=2, stride=2, padding=0, bias=True)
-
-        self.dec2_2 = CBR2d(in_channels=2 * 128, out_channels=128)
-        self.dec2_1 = CBR2d(in_channels=128, out_channels=64)
-
-        self.unpool1 = nn.ConvTranspose2d(in_channels=64, out_channels=64,
-                                          kernel_size=2, stride=2, padding=0, bias=True)
-
-        self.dec1_2 = CBR2d(in_channels=2 * 64, out_channels=64)
-        self.dec1_1 = CBR2d(in_channels=64, out_channels=64)
-        #1x1 conv 레이어 추가 
-        self.fc = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1, stride=1, padding=0, bias=True)
-#레이어 연결하기 
     def forward(self, x):
+        #인코더 단계
         enc1_1 = self.enc1_1(x)
         enc1_2 = self.enc1_2(enc1_1)
         pool1 = self.pool1(enc1_2)
@@ -94,12 +80,13 @@ class UNet(nn.Module):
         enc4_2 = self.enc4_2(enc4_1)
         pool4 = self.pool4(enc4_2)
 
+        #Bottleneck 
         enc5_1 = self.enc5_1(pool4)
 
+        #디코더 단계
         dec5_1 = self.dec5_1(enc5_1)
-
         unpool4 = self.unpool4(dec5_1)
-        cat4 = torch.cat((unpool4, enc4_2), dim=1)
+        cat4 = torch.cat((unpool4, enc4_2), dim=1)  
         dec4_2 = self.dec4_2(cat4)
         dec4_1 = self.dec4_1(dec4_2)
 
@@ -119,5 +106,4 @@ class UNet(nn.Module):
         dec1_1 = self.dec1_1(dec1_2)
 
         x = self.fc(dec1_1)
-
         return x
