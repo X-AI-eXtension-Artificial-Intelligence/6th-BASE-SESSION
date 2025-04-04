@@ -33,9 +33,39 @@ if not os.path.exists(result_dir):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 ## 네트워크 구축하기
-class UNet(nn.Module):
+## Attention 메커니즘 추가 -> 어텐션이 중요한 부분만 볼 수 있게 해주니까 여기 데이터셋에서 쓰는 것이 좋다고 생각해서 넣음음
+class AttentionGate(nn.Module):
+    def __init__(self, F_g, F_l, F_int):
+        super(AttentionGate, self).__init__()
+
+        self.W_g = nn.Sequential(
+            nn.Conv2d(F_g, F_int, kernel_size=1),
+            nn.BatchNorm2d(F_int)
+        )
+
+        self.W_x = nn.Sequential(
+            nn.Conv2d(F_l, F_int, kernel_size=1),
+            nn.BatchNorm2d(F_int)
+        )
+
+        self.psi = nn.Sequential(
+            nn.Conv2d(F_int, 1, kernel_size=1),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid()
+        )
+
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, g, x):
+        g1 = self.W_g(g)
+        x1 = self.W_x(x)
+        psi = self.relu(g1 + x1)
+        psi = self.psi(psi)
+        return x * psi
+
+class AttentionUNet(nn.Module):
     def __init__(self):
-        super(UNet, self).__init__()
+        super(AttentionUNet, self).__init__()
 
         def CBR2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=True):
             layers = []
@@ -44,7 +74,7 @@ class UNet(nn.Module):
                                  bias=bias)]
             layers += [nn.BatchNorm2d(num_features=out_channels)]
             layers += [nn.ReLU()]
-
+            layers += [nn.Dropout2d(p=0.3)]  # 드롭아웃 추가
             cbr = nn.Sequential(*layers)
 
             return cbr
@@ -212,7 +242,7 @@ class Normalization(object):
 
         return data
 
-class RandomFlip(object):
+class RandomFlip(object):        # 방향이 달라져도 같은 의미라는 걸 학습
     def __call__(self, data):
         label, input = data['label'], data['input']
 
@@ -227,19 +257,57 @@ class RandomFlip(object):
         data = {'label': label, 'input': input}
 
         return data
+    
+class RandomRotate(object):
+    def __call__(self, data):
+        k = np.random.choice([0, 1, 2, 3])  # 90도 단위로 회전
+        data['input'] = np.rot90(data['input'], k)
+        data['label'] = np.rot90(data['label'], k)
+        return data
 
+class AddNoise(object):
+    def __call__(self, data):
+        noise = np.random.normal(0, 0.01, data['input'].shape)
+        data['input'] = np.clip(data['input'] + noise, 0.0, 1.0)  # 값 범위 유지
+        return data
 
 ## 네트워크 학습하기
-transform = transforms.Compose([Normalization(mean=0.5, std=0.5), ToTensor()])
+## RandomRotate, AddNoise 를 추가해서 방향성에 대해 강건하게 만들고 입력에 작은 랜덤 노이즈를 더함.
+transform = transforms.Compose([
+    RandomFlip(),
+    RandomRotate(),
+    AddNoise(),
+    Normalization(mean=0.5, std=0.5),
+    ToTensor()
+])
 
 dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
 loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
 
 ## 네트워크 생성하기
-net = UNet().to(device)
+net = AttentionUNet().to(device)
 
 ## 손실함수 정의하기
-fn_loss = nn.BCEWithLogitsLoss().to(device)
+## 기존 손실 함수: BCEWithLogitsLoss             ->              개선된 손실 함수: DiceLoss
+## 픽셀 단위로 0 또는 1을 예측하게 함                               # 전체 세그멘테이션의 정확한 모양에 집중
+##클래스 불균형에 약함 (예: 배경 90%, 객체 10%)                     # 예측 결과와 실제 마스크의 겹치는 영역이 많을수록 좋은 점수
+##전체 모양보다는 각 픽셀의 맞고 틀림에 집중함                       # 클래스 불균형에 강함! (픽셀이 적은 클래스도 반영 잘 됨)
+class DiceLoss(nn.Module):
+    def __init__(self):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1e-6):
+        inputs = torch.sigmoid(inputs)  # 시그모이드 먼저 적용
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        intersection = (inputs * targets).sum()
+        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        return 1 - dice
+
+dice = DiceLoss().to(device)
+bce = nn.BCEWithLogitsLoss().to(device)
+fn_loss = lambda output, label: 0.5 * dice(output, label) + 0.5 * bce(output, label)
 
 ## Optimizer 설정하기
 optim = torch.optim.Adam(net.parameters(), lr=lr)
