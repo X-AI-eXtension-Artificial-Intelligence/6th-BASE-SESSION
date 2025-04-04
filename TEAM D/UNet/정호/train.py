@@ -9,7 +9,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter  # 학습과정을 모니터링할 수 있게 해줌
 
-from model import UNet
+
+from model import UNet_Improved as UNet 
 from dataset import *
 from util import *
 
