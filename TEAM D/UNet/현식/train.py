@@ -65,8 +65,9 @@ num_data_val = len(dataset_val)
 num_batch_train = np.ceil(num_data_train / batch_size)
 num_batch_val = np.ceil(num_data_val / batch_size)
 
+num_classes = 1
 
-net = UNet().to(device)
+net = UNet(num_classes = num_classes).to(device)
 fn_loss = nn.BCEWithLogitsLoss().to(device)
 optim = torch.optim.Adam(net.parameters(), lr=lr)
 
