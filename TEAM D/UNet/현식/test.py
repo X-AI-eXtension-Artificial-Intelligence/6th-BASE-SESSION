@@ -53,8 +53,9 @@ num_data_test = len(dataset_test)
 
 num_batch_test = np.ceil(num_data_test / batch_size)
     
+num_classes = 1
 
-net = UNet().to(device)
+net = UNet(num_classes = num_classes).to(device)
 
 fn_loss = nn.BCEWithLogitsLoss().to(device)
 
@@ -99,6 +100,3 @@ with torch.no_grad():
 
 print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
         (batch, num_batch_test, np.mean(loss_arr)))
-
-
-# Test Loss : 0.2089
