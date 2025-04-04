@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from model import UNet  # U-Net 모델 정의
+
 from dataset import *  # 데이터셋 관련 유틸리티 불러오기
 from util import *  # 기타 유틸리티 함수들
 import matplotlib.pyplot as plt
@@ -17,8 +18,8 @@ from torchvision import transforms, datasets
 parser = argparse.ArgumentParser(description="Train the UNet",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument("--lr", default=1e-3, type=float, dest="lr")  # 학습률 설정
-parser.add_argument("--batch_size", default=4, type=int, dest="batch_size")  # 배치 크기 설정
+parser.add_argument("--lr", default=0.005, type=float, dest="lr")  # 학습률 설정
+parser.add_argument("--batch_size", default=5, type=int, dest="batch_size")  # 배치 크기 설정
 parser.add_argument("--num_epoch", default=100, type=int, dest="num_epoch")  # 학습 epoch 수 설정
 
 # 데이터, 체크포인트, 로그 및 결과 저장 경로 설정
