@@ -55,7 +55,7 @@ for i in range(nframe_train):
     np.save(os.path.join(dir_save_train, 'label_%03d.npy' % i), label_)
     np.save(os.path.join(dir_save_train, 'input_%03d.npy' % i), input_)
 
-## 왜 numpy 형태로 저장할까?
+'왜 numpy 형태로 저장할까?'
 ## -> 이미지 shape이 (512,512)
 a = label_.shape
 a
