@@ -1,9 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
 from PIL import Image
-
 
 '''
 UNet 학습을 위한 EM Segmentation Challenge에 사용된 membrane 데이터셋, 세포 이미지
@@ -77,8 +75,6 @@ def data_preprocessing(data_dir):
         np.save(os.path.join(dir_save_test, 'input_%03d.npy' % i), input_)
 
     print("\n### Data Preprocessed. ###\n")
-
-
 
 
 if __name__ == '__main__':
