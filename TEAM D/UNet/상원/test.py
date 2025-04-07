@@ -11,6 +11,15 @@ from model import AttentionUNet, DiceLoss
 from dataset import Dataset, Normalization, ToTensor
 from util import load, fn_tonumpy, fn_denorm, fn_class
 
+# Dice Coefficient 계산 함수 추가
+def compute_dice_coef(inputs, targets, smooth=1e-6):
+    inputs = torch.sigmoid(inputs)
+    inputs = inputs.view(-1)
+    targets = targets.view(-1)
+    intersection = (inputs * targets).sum()
+    dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+    return dice.item()
+
 # argparse 설정
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=4)
@@ -48,6 +57,7 @@ net, _, st_epoch = load(args.ckpt_dir, net, None)
 # 테스트 루프
 net.eval()
 loss_arr = []
+dice_arr = []
 with torch.no_grad():
     for batch, data in enumerate(test_loader, 1):
         label = data['label'].to(device)
@@ -57,7 +67,10 @@ with torch.no_grad():
         loss = fn_loss(output, label)
         loss_arr += [loss.item()]
 
-        print(f"TEST: BATCH {batch:04d} | LOSS {np.mean(loss_arr):.4f}")
+        dice_score = compute_dice_coef(output, label)
+        dice_arr += [dice_score]
+
+        print(f"TEST: BATCH {batch:04d} | LOSS {np.mean(loss_arr):.4f} | DICE {np.mean(dice_arr):.4f}")
 
         input_np = fn_tonumpy(fn_denorm(input, 0.5, 0.5))
         label_np = fn_tonumpy(label)
@@ -74,8 +87,14 @@ with torch.no_grad():
             np.save(os.path.join(args.result_dir, 'numpy', f'output_{id:04d}.npy'), output_np[j].squeeze())
 
 print(f"AVERAGE TEST LOSS: {np.mean(loss_arr):.4f}")
+print(f"AVERAGE TEST Dice Coefficient: {np.mean(dice_arr):.4f}")
 
 
-## TEST
+## TEST 1
 ## BATCH 0001 | LOSS 0.1557
 ## AVERAGE TEST LOSS: 0.1557
+
+## TEST 2 RandomRotate, AddNoise 추가 성능지표도 추가
+## BATCH 0001 | LOSS 0.1403 | DICE 0.9245
+## AVERAGE TEST LOSS: 0.1403
+## AVERAGE TEST Dice Coefficient: 0.9245
