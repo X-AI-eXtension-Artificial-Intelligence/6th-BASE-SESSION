@@ -1,4 +1,4 @@
-# 라이브러리 추가하기
+## 라이브러리 추가하기
 import argparse
 
 import os
@@ -7,24 +7,26 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter  # 학습과정을 모니터링할 수 있게 해줌
+from torch.utils.tensorboard import SummaryWriter
 
-
-from model import UNet_Improved as UNet 
-from dataset import *
+from model_re import UNet
+from dataset import Dataset, ToTensor, RandomFlip, Normalization
 from util import *
 
 import matplotlib.pyplot as plt
 
 from torchvision import transforms, datasets
 
-# Parser 생성하기
+## Parser 생성하기
+# 하드코딩을 피하고 유연한 실행 환경 제공
+# ex. python train.py --lr 5e-4
+# ex. python train.py --mode train
 parser = argparse.ArgumentParser(description="Train the UNet",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument("--lr", default=1e-3, type=float, dest="lr")
 parser.add_argument("--batch_size", default=4, type=int, dest="batch_size")
-parser.add_argument("--num_epoch", default=100, type=int, dest="num_epoch")
+parser.add_argument("--num_epoch", default=10, type=int, dest="num_epoch")
 
 parser.add_argument("--data_dir", default="./datasets", type=str, dest="data_dir")
 parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
@@ -36,7 +38,7 @@ parser.add_argument("--train_continue", default="off", type=str, dest="train_con
 
 args = parser.parse_args()
 
-# 트레이닝 파라메터 설정하기
+## 트레이닝 파라메터 설정하기
 lr = args.lr
 batch_size = args.batch_size
 num_epoch = args.num_epoch
@@ -60,12 +62,12 @@ print("log dir: %s" % log_dir)
 print("result dir: %s" % result_dir)
 print("mode: %s" % mode)
 
-# 디렉토리 생성하기
+## 디렉토리 생성하기
 if not os.path.exists(result_dir):
     os.makedirs(os.path.join(result_dir, 'png'))
     os.makedirs(os.path.join(result_dir, 'numpy'))
 
-# 네트워크 학습하기
+## 네트워크 학습하기
 if mode == 'train':
     transform = transforms.Compose([Normalization(mean=0.5, std=0.5), RandomFlip(), ToTensor()])
 
@@ -92,26 +94,31 @@ else:
 
     num_batch_test = np.ceil(num_data_test / batch_size)
 
-# 네트워크 생성하기
+## 네트워크 생성하기
 net = UNet().to(device)
 
-# 손실함수 정의하기
+## 손실함수 정의하기
+# 내부적으로 Sigmoid 활성화 함수를 포함하고 있어, 마지막 출력층에서 별도로 Sigmoid를 사용할 필요 없음
 fn_loss = nn.BCEWithLogitsLoss().to(device)
 
-# Optimizer 설정하기
+## Optimizer 설정하기
 optim = torch.optim.Adam(net.parameters(), lr=lr)
 
-# 그밖에 부수적인 functions 설정하기
-fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)  # CPU로 이동해 tensor -> numpy로 변환
-fn_denorm = lambda x, mean, std: (x * std) + mean                          # 정규화된 이미지를 원래의 스케일로 되돌림
-fn_class = lambda x: 1.0 * (x > 0.5)                                       # output을 binary class로 변환
+## 그밖에 부수적인 functions 설정하기
+# PyTorch Tensor를 NumPy 배열로 변환하는 함수
+# detach(): 그래디언트 정보 제거 (역전파 방지)
+# ranspose(0, 2, 3, 1): (N, C, H, W) → (N, H, W, C)로 변환 (이미지 데이터 표준 형태)
+fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
+# 정규화된 데이터를 원래 값으로 되돌리는 함수
+fn_denorm = lambda x, mean, std: (x * std) + mean
+# 모델의 예측값을 0 또는 1로 변환하는 함수 (이진 분류)
+fn_class = lambda x: 1.0 * (x > 0.5)
 
-
-# Tensorboard 를 사용하기 위한 SummaryWriter 설정
+## Tensorboard 를 사용하기 위한 SummaryWriter 설정
 writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
 writer_val = SummaryWriter(log_dir=os.path.join(log_dir, 'val'))
 
-# 네트워크 학습시키기
+## 네트워크 학습시키기
 st_epoch = 0
 
 # TRAIN MODE
@@ -232,3 +239,4 @@ else:
 
     print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
           (batch, num_batch_test, np.mean(loss_arr)))
+

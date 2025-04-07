@@ -8,23 +8,20 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import matplotlib.pyplot as plt
-
+from dataset import Dataset, ToTensor, RandomFlip, Normalization
+from model_re import UNet
 from torchvision import transforms, datasets
 
-from model import UNet
-import dataset 
-from util import *
-
-## 트레이닝 파라미터 설정하기
+## 트레이닝 파라메터 설정하기
 lr = 1e-3
 batch_size = 4
-num_epoch = 100
-
+num_epoch = 10
 
 data_dir = './datasets'
 ckpt_dir = './checkpoint'
 log_dir = './log'
 result_dir = './results'
+
 
 if not os.path.exists(result_dir):
     os.makedirs(os.path.join(result_dir, 'png'))
@@ -33,19 +30,17 @@ if not os.path.exists(result_dir):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-
-
 ## 네트워크 학습하기
-transform = transforms.Compose([dataset.Normalization(mean=0.5, std=0.5), dataset.ToTensor()])
+transform = transforms.Compose([Normalization(mean=0.5, std=0.5), ToTensor()])
 
-dataset_test = dataset.Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
+dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
 loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
 
 ## 네트워크 생성하기
 net = UNet().to(device)
 
 ## 손실함수 정의하기
-fn_loss = nn.BCEWithLogitsLoss().to(device)  # Binary Cross Entropy with Logits Loss. 
+fn_loss = nn.BCEWithLogitsLoss().to(device)
 
 ## Optimizer 설정하기
 optim = torch.optim.Adam(net.parameters(), lr=lr)
@@ -60,7 +55,30 @@ fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
 fn_denorm = lambda x, mean, std: (x * std) + mean
 fn_class = lambda x: 1.0 * (x > 0.5)
 
+## 네트워크 저장하기
+def save(ckpt_dir, net, optim, epoch):
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
 
+    torch.save({'net': net.state_dict(), 'optim': optim.state_dict()},
+               "./%s/model_epoch%d.pth" % (ckpt_dir, epoch))
+
+## 네트워크 불러오기
+def load(ckpt_dir, net, optim):
+    if not os.path.exists(ckpt_dir):
+        epoch = 0
+        return net, optim, epoch
+
+    ckpt_lst = os.listdir(ckpt_dir)
+    ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+
+    dict_model = torch.load('./%s/%s' % (ckpt_dir, ckpt_lst[-1]))
+
+    net.load_state_dict(dict_model['net'])
+    optim.load_state_dict(dict_model['optim'])
+    epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
+
+    return net, optim, epoch
 
 ## 네트워크 학습시키기
 st_epoch = 0
