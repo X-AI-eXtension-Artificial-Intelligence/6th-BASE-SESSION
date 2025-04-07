@@ -85,4 +85,16 @@ class RandomFlip(object):
         data = {'label': label, 'input': input}
 
         return data
+    
+class RandomRotate(object):
+    def __call__(self, data):
+        k = np.random.choice([0, 1, 2, 3])  # 90도 단위로 회전
+        data['input'] = np.rot90(data['input'], k)
+        data['label'] = np.rot90(data['label'], k)
+        return data
 
+class AddNoise(object):
+    def __call__(self, data):
+        noise = np.random.normal(0, 0.01, data['input'].shape)
+        data['input'] = np.clip(data['input'] + noise, 0.0, 1.0)  # 값 범위 유지
+        return data

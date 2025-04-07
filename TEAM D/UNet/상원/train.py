@@ -10,6 +10,7 @@ from torchvision import transforms
 from model import AttentionUNet, DiceLoss
 from dataset import Dataset, Normalization, RandomFlip, ToTensor
 from util import save, load, fn_tonumpy, fn_denorm, fn_class
+from dataset import RandomRotate, AddNoise
 
 # argparse 설정
 parser = argparse.ArgumentParser()
@@ -34,6 +35,8 @@ if not os.path.exists(args.result_dir):
 # 데이터셋 및 DataLoader
 transform = transforms.Compose([
     RandomFlip(),
+    RandomRotate(),
+    AddNoise(),
     Normalization(mean=0.5, std=0.5),
     ToTensor()
 ])
