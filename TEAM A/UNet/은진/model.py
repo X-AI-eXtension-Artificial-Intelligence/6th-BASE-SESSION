@@ -1,4 +1,4 @@
-# 📁 Step 3: model.py ❤️
+# 📁 Step 3: model.py
 # U-Net 모델 구조 정의
 
 import os
@@ -20,7 +20,7 @@ class UNet(nn.Module):
             ]
             return nn.Sequential(*layers)
 
-        # 인코더 정의
+        # 인코더 (Contracting path)
         self.enc1_1 = CBR2d(1, 64)
         self.enc1_2 = CBR2d(64, 64)
         self.pool1 = nn.MaxPool2d(2)
@@ -39,7 +39,7 @@ class UNet(nn.Module):
 
         self.enc5_1 = CBR2d(512, 1024)  # bottleneck
 
-        # 디코더 정의
+        # 디코더 (Expansive path)
         self.dec5_1 = CBR2d(1024, 512)
         self.unpool4 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
 
