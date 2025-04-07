@@ -12,11 +12,11 @@ from torchvision import transforms, datasets
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data_dir, transform=None):
         self.data_dir = data_dir #data 경로
-        self.transform = transform #이미지 전처리를 위한 transform
+        self.transform = transform #전처리
 
         lst_data = os.listdir(self.data_dir) #경로 내 모든 파일이름 리스트로 불러오기
 
-        lst_label = [f for f in lst_data if f.startswith('label')] #label로 시작하면 label 리스트에 넣고,
+        lst_label = [f for f in lst_data if f.startswith('label')] #label로 시작하면 label 리스트에 넣기
         lst_input = [f for f in lst_data if f.startswith('input')] #input으로 시작하면 image 리스트에 넣기
 
         #정렬
@@ -62,11 +62,11 @@ class ToTensor(object):
     def __call__(self, data):
         label, input = data['label'], data['input']
 
-        #Numpy에서는 H,W,C 형식인데 텐서는 C,H,W라 기존 2번 인덱스가 0으로 0번이 1으로 조정
+        #Numpy에서는 H,W,C 형식인데 텐서는 C,H,W라 기존 2번 인덱스가 0번, 0번이 1번이 되도록 조정
         label = label.transpose((2, 0, 1)).astype(np.float32)
         input = input.transpose((2, 0, 1)).astype(np.float32)
 
-        #from_numpy로 numpy 형태를 텐서로 변환해서 딕셔너리 다시 저장
+        #from_numpy로 numpy 형태를 다시 텐서로 변환해서 딕셔너리 저장
         data = {'label': torch.from_numpy(label), 'input': torch.from_numpy(input)}
 
         return data
