@@ -54,74 +54,65 @@ class UNet(nn.Module):
         self.out_conv = nn.Conv2d(in_channels=64, out_channels=out_channel, kernel_size=1)
     
 
-    def forward(self, x):
+    def forward(self, x, x_canny):
         enc_1_1 = self.enc_1_1(x)
-        # print('### after enc_1_1 :  ', enc_1_1.size())
         enc_1_2 = self.enc_1_2(enc_1_1)
-        # print('### after enc_1_2 :  ', enc_1_2.size())
         pool_1 = self.pool_1(enc_1_2)
 
         enc_2_1 = self.enc_2_1(pool_1)
-        # print('### after enc_2_1 :  ', enc_2_1.size())
         enc_2_2 = self.enc_2_2(enc_2_1)
-        # print('### after enc_2_2 :  ', enc_2_2.size())
         pool_2 = self.pool_2(enc_2_2)
 
         enc_3_1 = self.enc_3_1(pool_2)
-        # print('### after enc_3_1 :  ', enc_3_1.size())
         enc_3_2 = self.enc_3_2(enc_3_1)
-        # print('### after enc_3_2 :  ', enc_3_2.size())
         pool_3 = self.pool_3(enc_3_2)
 
         enc_4_1 = self.enc_4_1(pool_3)
-        # print('### after enc_4_1 :  ', enc_4_1.size())
         enc_4_2 = self.enc_4_2(enc_4_1)
-        # print('### after enc_4_2 :  ', enc_4_2.size())
         pool_4 = self.pool_4(enc_4_2)
 
         enc_5_1 = self.enc_5_1(pool_4)
-        # print('### after enc_5_1 :  ', enc_5_1.size())
         enc_5_2 = self.enc_5_2(enc_5_1)
-        # print('### after enc_5_2 :  ', enc_5_2.size())
 
+
+        ### 인코더에 대해 canny도 통과시켜줘야함
+        enc_c_1_1 = self.enc_1_1(x_canny)
+        enc_c_1_2 = self.enc_1_2(enc_c_1_1)
+        pool_c_1 = self.pool_1(enc_c_1_2)
+
+        enc_c_2_1 = self.enc_2_1(pool_c_1)
+        enc_c_2_2 = self.enc_2_2(enc_c_2_1)
+        pool_c_2 = self.pool_2(enc_c_2_2)
+
+        enc_c_3_1 = self.enc_3_1(pool_c_2)
+        enc_c_3_2 = self.enc_3_2(enc_c_3_1)
+        pool_c_3 = self.pool_3(enc_c_3_2)
+
+        enc_c_4_1 = self.enc_4_1(pool_c_3)
+        enc_c_4_2 = self.enc_4_2(enc_c_4_1)
+        
+        # bottleneck
         upConv_4 = self.upConv_4(enc_5_2)
-        # print('### after upConv_4 :  ', upConv_4.size())
-        cat_4 = torch.cat([upConv_4, enc_4_2], dim=1)
-        # print('### after cat_4 :  ', cat_4.size())
+        cat_4 = torch.cat([upConv_4, enc_c_4_2], dim=1) # canny를 연결
 
         dec_4_1 = self.dec_4_1(cat_4)
-        # print('### after dec_4_1 :  ', dec_4_1.size())
         dec_4_2 = self.dec_4_2(dec_4_1)
-        # print('### after dec_4_2 :  ', dec_4_2.size())
 
         upConv_3 = self.upConv_3(dec_4_2)
-        # print('### after upConv_3 :  ', upConv_3.size())
-        cat_3 = torch.cat([upConv_3, enc_3_2], dim=1)
-        # print('### after cat_3 :  ', cat_3.size())
+        cat_3 = torch.cat([upConv_3, enc_c_3_2], dim=1)
         dec_3_1 = self.dec_3_1(cat_3)
-        # print('### after dec_3_1 :  ', dec_3_1.size())
         dec_3_2 = self.dec_3_2(dec_3_1)
-        # print('### after dec_3_2 :  ', dec_3_2.size())
 
         upConv_2 = self.upConv_2(dec_3_2)
-        # print('### after upConv_2 :  ', upConv_2.size())
-        cat_2 = torch.cat([upConv_2, enc_2_2], dim=1)
-        # print('### after cat_2 :  ', cat_2.size())
+        cat_2 = torch.cat([upConv_2, enc_c_2_2], dim=1)
         dec_2_1 = self.dec_2_1(cat_2)
-        # print('### after dec_2_1 :  ', dec_2_1.size())
         dec_2_2 = self.dec_2_2(dec_2_1)
-        # print('### after dec_2_2 :  ', dec_2_2.size())
 
         upConv_1 = self.upConv_1(dec_2_2)
-        # print('### after upConv_1 :  ', upConv_1.size())
-        cat_1 = torch.cat([upConv_1, enc_1_2], dim=1)
-        # print('### after cat_1 :  ', cat_1.size())
+        cat_1 = torch.cat([upConv_1, enc_c_1_2], dim=1)
         dec_1_1 = self.dec_1_1(cat_1)
-        # print('### after dec_1_1 :  ', dec_1_1.size())
         dec_1_2 = self.dec_1_2(dec_1_1)
-        # print('### after dec_1_2 :  ', dec_1_2.size())
 
         out = self.out_conv(dec_1_2)
-        # print('### final dimension :  ', out.size())
 
         return out
