@@ -20,13 +20,20 @@ class UNet(nn.Module):
             #relu 정의
             layers += [nn.ReLU()]
 
+
             cbr = nn.Sequential(*layers)
 
             return cbr
 
-        # Contracting path
-        self.enc1_1 = CBR2d(in_channels=1, out_channels=64) #인코더의 첫번째 스테이지 
+        # 추가된 인코더
+        self.enc0_1 = CBR2d(in_channels=1, out_channels=32)
+        self.enc0_2 = CBR2d(in_channels=32, out_channels=32)
+        self.pool0 = nn.MaxPool2d(kernel_size=2)
+
+        # 이후 기존 enc1_1~ 부터 시작 (in_channels=32)
+        self.enc1_1 = CBR2d(in_channels=32, out_channels=64)
         self.enc1_2 = CBR2d(in_channels=64, out_channels=64)
+
 
         self.pool1 = nn.MaxPool2d(kernel_size=2)
         #인코더 두번째 
@@ -73,12 +80,20 @@ class UNet(nn.Module):
                                           kernel_size=2, stride=2, padding=0, bias=True)
 
         self.dec1_2 = CBR2d(in_channels=2 * 64, out_channels=64)
-        self.dec1_1 = CBR2d(in_channels=64, out_channels=64)
-        #1x1 conv 레이어 추가 
-        self.fc = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1, stride=1, padding=0, bias=True)
+        self.dec1_1 = CBR2d(64, 32)
+        self.unpool0 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+
+        self.dec0_2 = CBR2d(32 + 32, 32)
+        self.dec0_1 = CBR2d(32, 32)
+
+        self.fc = nn.Conv2d(32, 1, kernel_size=1)
 #레이어 연결하기 
     def forward(self, x):
-        enc1_1 = self.enc1_1(x)
+        enc0_1 = self.enc0_1(x)
+        enc0_2 = self.enc0_2(enc0_1)
+        pool0 = self.pool0(enc0_2)
+
+        enc1_1 = self.enc1_1(pool0)
         enc1_2 = self.enc1_2(enc1_1)
         pool1 = self.pool1(enc1_2)
 
@@ -97,27 +112,33 @@ class UNet(nn.Module):
         enc5_1 = self.enc5_1(pool4)
 
         dec5_1 = self.dec5_1(enc5_1)
-
         unpool4 = self.unpool4(dec5_1)
+
         cat4 = torch.cat((unpool4, enc4_2), dim=1)
         dec4_2 = self.dec4_2(cat4)
         dec4_1 = self.dec4_1(dec4_2)
-
         unpool3 = self.unpool3(dec4_1)
+
         cat3 = torch.cat((unpool3, enc3_2), dim=1)
         dec3_2 = self.dec3_2(cat3)
         dec3_1 = self.dec3_1(dec3_2)
-
         unpool2 = self.unpool2(dec3_1)
+
         cat2 = torch.cat((unpool2, enc2_2), dim=1)
         dec2_2 = self.dec2_2(cat2)
         dec2_1 = self.dec2_1(dec2_2)
-
         unpool1 = self.unpool1(dec2_1)
+
         cat1 = torch.cat((unpool1, enc1_2), dim=1)
         dec1_2 = self.dec1_2(cat1)
         dec1_1 = self.dec1_1(dec1_2)
+        unpool0 = self.unpool0(dec1_1)
 
-        x = self.fc(dec1_1)
+        cat0 = torch.cat((unpool0, enc0_2), dim=1)
+        dec0_2 = self.dec0_2(cat0)
+        dec0_1 = self.dec0_1(dec0_2)
+
+      
+        x = self.fc(dec0_1)
 
         return x
