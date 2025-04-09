@@ -9,7 +9,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader  # 배치 단위 데이터 로딩
 from torch.utils.tensorboard import SummaryWriter  # TensorBoard 시각화용 로그 기록
 
-from UNet import UNet  # U-Net 모델 불러오기
+from UNet_residual_02 import UNet  ### U-Net Residual 모델 불러오기
+
+
 from dataset import *  # 커스텀 데이터셋 클래스 및 변환 함수들
 from util import *  # 저장 및 불러오기, 보조 함수들
 
@@ -24,7 +26,7 @@ parser = argparse.ArgumentParser(description="Train the UNet",
 # 주요 학습 하이퍼파라미터 등록
 parser.add_argument("--lr", default=1e-3, type=float, dest="lr")  # learning rate
 parser.add_argument("--batch_size", default=4, type=int, dest="batch_size")  # 배치 크기
-parser.add_argument("--num_epoch", default=100, type=int, dest="num_epoch")  # 학습 epoch 수
+parser.add_argument("--num_epoch", default=70, type=int, dest="num_epoch")  # 학습 epoch 수
 
 # 디렉토리 경로 등록
 parser.add_argument("--data_dir", default="./datasets", type=str, dest="data_dir")  # 데이터 위치
@@ -102,30 +104,25 @@ else:
     num_data_test = len(dataset_test)
     num_batch_test = np.ceil(num_data_test / batch_size)
 
-
-
-## 네트워크 생성하기 ---------------------
+## 네트워크 생성하기
 net = UNet().to(device)
 
-# 손실함수 정의하기 (Binary Classification에 적합)
+## 손실함수 정의하기 (Binary Classification에 적합)
 fn_loss = nn.BCEWithLogitsLoss().to(device)
 
-# Optimizer 설정하기 (Adam 사용)
+## Optimizer 설정하기 (Adam 사용)
 optim = torch.optim.Adam(net.parameters(), lr=lr)
 
-
-## output 저장을 위한 부수적인 functions ---------------------
-# 기타 함수 (넘파이 변환, 정규화 복원 등)
-fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)  # 텐서에서 넘파이로 [B, C, H, W] → [B, H, W, C]
+## 기타 함수 정의 (넘파이 변환, 정규화 복원 등)
+fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)  # [B, C, H, W] → [B, H, W, C]
 fn_denorm = lambda x, mean, std: (x * std) + mean  # 정규화 복원
-fn_class = lambda x: 1.0 * (x > 0.5)  # 이미지를 0.5 기준 이진화
+fn_class = lambda x: 1.0 * (x > 0.5)  # 0.5 기준 이진화
 
-# TensorBoard 로그 기록기 생성
+## TensorBoard 로그 기록기 생성
 writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
 writer_val = SummaryWriter(log_dir=os.path.join(log_dir, 'val'))
 
-
-## 학습 시작 ----------------------------------------------------------
+## 학습 시작 epoch 설정
 st_epoch = 0
 
 # TRAIN MODE
@@ -179,10 +176,11 @@ if mode == 'train':
                 label = data['label'].to(device)
                 input = data['input'].to(device)
                 output = net(input)
-                
-                # backward pass (손실 계산)
+
+                # 손실 계산
                 loss = fn_loss(output, label)
                 loss_arr += [loss.item()]
+
                 print("VALID: EPOCH %04d / %04d | BATCH %04d / %04d | LOSS %.4f" %
                       (epoch, num_epoch, batch, num_batch_val, np.mean(loss_arr)))
 
@@ -197,8 +195,8 @@ if mode == 'train':
 
         writer_val.add_scalar('loss', np.mean(loss_arr), epoch)
 
-        # 모델 저장 (30 에폭마다)
-        if epoch % 30 == 0:
+        # 모델 저장 (50 에폭마다)
+        if epoch % 50 == 0:
             save(ckpt_dir=ckpt_dir, net=net, optim=optim, epoch=epoch)
 
     writer_train.close()
@@ -209,7 +207,6 @@ else:
     # 저장된 모델 불러오기
     net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
 
-    # validation
     with torch.no_grad():
         net.eval()
         loss_arr = []
