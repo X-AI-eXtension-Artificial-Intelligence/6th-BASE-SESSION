@@ -6,7 +6,7 @@ import torch.nn as nn
 
 ## U-Net 네트워크 정의
 class UNet(nn.Module):
-    def __init__(self):
+    def __init__(self):  # 필요한 레이어 선
         super(UNet, self).__init__()
 
         # Conv + BN + ReLU 묶어주는 함수 (계속 반복되니까 함수로)
@@ -42,15 +42,17 @@ class UNet(nn.Module):
         # bottleneck 
         self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
 
+
+
+
         ## 디코더 (Expansive Path) - 업샘플링하면서 인코더 출력이랑 skip 연결
+
         self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)  # 채널 줄여주기
 
         # 업샘플링 (ConvTranspose로 크기 2배 늘림)
         self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512,
                                           kernel_size=2, stride=2)
-
-        # 인코더의 enc4_2랑 concat (채널 2배됨)
-        self.dec4_2 = CBR2d(in_channels=2 * 512, out_channels=512)
+        self.dec4_2 = CBR2d(in_channels=2 * 512, out_channels=512)  # in_channels : 인코더의 enc4_2랑 concat (채널 2배됨)
         self.dec4_1 = CBR2d(in_channels=512, out_channels=256)
 
         self.unpool3 = nn.ConvTranspose2d(in_channels=256, out_channels=256,
@@ -68,11 +70,18 @@ class UNet(nn.Module):
         self.dec1_2 = CBR2d(in_channels=2 * 64, out_channels=64)
         self.dec1_1 = CBR2d(in_channels=64, out_channels=64)
 
-        # 최종 출력 계층 - 채널 수를 1로 줄여서 마스크(또는 예측 결과) 출력
+        # 최종 출력 계층 1x1 Conv layer - 채널 수를 1로 줄여서 마스크(또는 예측 결과) 출력
         self.fc = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1)
 
-    def forward(self, x):
-        ## 인코더 경로 (downsampling)
+
+
+
+
+
+
+
+    def forward(self, x):   # 레이어 연결
+        ## 인코더 경로 (downsampling) # Contracting path
         enc1_1 = self.enc1_1(x)
         enc1_2 = self.enc1_2(enc1_1)
         pool1 = self.pool1(enc1_2)
@@ -91,7 +100,10 @@ class UNet(nn.Module):
 
         enc5_1 = self.enc5_1(pool4)  # bottleneck
 
-        ## 디코더 경로 (upsampling)
+
+
+
+        ## 디코더 경로 (upsampling) # Expansive path
         dec5_1 = self.dec5_1(enc5_1)
 
         unpool4 = self.unpool4(dec5_1)

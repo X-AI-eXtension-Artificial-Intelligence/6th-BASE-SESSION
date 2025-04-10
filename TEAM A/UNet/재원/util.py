@@ -1,14 +1,13 @@
 # 라이브러리
 import os
 import numpy as np
-
 import torch
 import torch.nn as nn
 
 # 학습된 네트워크 가중치 저장
 def save(ckpt_dir, net, optim, epoch):
 
-    # 없으면 경로 만들기
+    # 없으면 경로 생성
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
 
@@ -28,7 +27,7 @@ def load(ckpt_dir, net, optim):
 
     ckpt_lst = os.listdir(ckpt_dir)
 
-    # 리스트 폴더는 있어도 저장 파일이 없으면 초기화 하도록 기존 코드에 추가
+    # 리스트 폴더는 있어도 저장 파일이 없으면 동일하게 초기화 하도록 기존 코드에 추가
     if len(ckpt_lst) == 0 :
         epoch = 0
         return net, optim, epoch
@@ -48,3 +47,13 @@ def load(ckpt_dir, net, optim):
     epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
 
     return net, optim, epoch
+
+# IoU 계산 함수
+def compute_iou(pred, true):
+    intersection = np.logical_and(pred == 1, true == 1).sum() #교집합
+    union = np.logical_or(pred == 1, true == 1).sum() #합집합
+    # 객체가 하나도 없으면 IoU를 1로 처리(둘 다 배경일 경우)
+    if union == 0:
+        return 1.0
+    else:
+        return intersection / union

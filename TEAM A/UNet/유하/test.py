@@ -1,4 +1,3 @@
-## 라이브러리 추가하기
 import os
 import numpy as np
 
@@ -11,10 +10,12 @@ import matplotlib.pyplot as plt
 
 from torchvision import transforms, datasets
 
-## 트레이닝 파라메터 설정하기
-lr = 1e-3
-batch_size = 4
-num_epoch = 100
+# 학습률 조정
+lr = 1e-4
+# batch size 조정 -> 하려고 했는데 실패
+batch_size = 4 
+# epoch 수 조정
+num_epoch = 200
 
 data_dir = './datasets'
 ckpt_dir = './checkpoint'
@@ -32,7 +33,6 @@ if not os.path.exists(result_dir):
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-## 네트워크 구축하기
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
@@ -42,14 +42,15 @@ class UNet(nn.Module):
             layers += [nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
                                  kernel_size=kernel_size, stride=stride, padding=padding,
                                  bias=bias)]
-            layers += [nn.BatchNorm2d(num_features=out_channels)]
-            layers += [nn.ReLU()]
+            # GroupNorm으로 변경 
+            layers += [nn.GroupNorm(num_groups=8, num_channels=out_channels)]
+            # LeakyReLU로 변경
+            layers += [nn.LeakyReLU(negative_slope=0.01)]
 
             cbr = nn.Sequential(*layers)
 
             return cbr
 
-        # Contracting path
         self.enc1_1 = CBR2d(in_channels=1, out_channels=64)
         self.enc1_2 = CBR2d(in_channels=64, out_channels=64)
 
@@ -72,7 +73,9 @@ class UNet(nn.Module):
 
         self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
 
-        # Expansive path
+        # Dropout 추가
+        self.dropout = nn.Dropout2d(p=0.3)
+
         self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)
 
         self.unpool4 = nn.ConvTranspose2d(in_channels=512, out_channels=512,
@@ -101,6 +104,15 @@ class UNet(nn.Module):
 
         self.fc = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=1, stride=1, padding=0, bias=True)
 
+        # 가중치 초기화
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+            nn.init.kaiming_normal_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
     def forward(self, x):
         enc1_1 = self.enc1_1(x)
         enc1_2 = self.enc1_2(enc1_1)
@@ -119,6 +131,9 @@ class UNet(nn.Module):
         pool4 = self.pool4(enc4_2)
 
         enc5_1 = self.enc5_1(pool4)
+
+        # Dropout 추가
+        enc5_1 = self.dropout(enc5_1)
 
         dec5_1 = self.dec5_1(enc5_1)
 
@@ -146,7 +161,6 @@ class UNet(nn.Module):
 
         return x
 
-## 데이터 로더를 구현하기
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data_dir, transform=None):
         self.data_dir = data_dir
@@ -186,7 +200,6 @@ class Dataset(torch.utils.data.Dataset):
         return data
 
 
-## 트렌스폼 구현하기
 class ToTensor(object):
     def __call__(self, data):
         label, input = data['label'], data['input']
@@ -229,32 +242,29 @@ class RandomFlip(object):
         return data
 
 
-## 네트워크 학습하기
 transform = transforms.Compose([Normalization(mean=0.5, std=0.5), ToTensor()])
 
 dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
 loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
 
-## 네트워크 생성하기
 net = UNet().to(device)
 
-## 손실함수 정의하기
 fn_loss = nn.BCEWithLogitsLoss().to(device)
 
-## Optimizer 설정하기
-optim = torch.optim.Adam(net.parameters(), lr=lr)
+# optimizer 변경
+optim = torch.optim.AdamW(net.parameters(), lr=lr)
 
-## 그밖에 부수적인 variables 설정하기
+# Scheduler 추가
+scheduler = torch.optim.lr_scheduler.StepLR(optim, step_size=50, gamma=0.5)
+
 num_data_test = len(dataset_test)
 
 num_batch_test = np.ceil(num_data_test / batch_size)
 
-## 그밖에 부수적인 functions 설정하기
 fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
 fn_denorm = lambda x, mean, std: (x * std) + mean
 fn_class = lambda x: 1.0 * (x > 0.5)
 
-## 네트워크 저장하기
 def save(ckpt_dir, net, optim, epoch):
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
@@ -262,7 +272,6 @@ def save(ckpt_dir, net, optim, epoch):
     torch.save({'net': net.state_dict(), 'optim': optim.state_dict()},
                "./%s/model_epoch%d.pth" % (ckpt_dir, epoch))
 
-## 네트워크 불러오기
 def load(ckpt_dir, net, optim):
     if not os.path.exists(ckpt_dir):
         epoch = 0
@@ -279,7 +288,6 @@ def load(ckpt_dir, net, optim):
 
     return net, optim, epoch
 
-## 네트워크 학습시키기
 st_epoch = 0
 net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
 
@@ -288,13 +296,11 @@ with torch.no_grad():
     loss_arr = []
 
     for batch, data in enumerate(loader_test, 1):
-        # forward pass
         label = data['label'].to(device)
         input = data['input'].to(device)
 
         output = net(input)
 
-        # 손실함수 계산하기
         loss = fn_loss(output, label)
 
         loss_arr += [loss.item()]
@@ -302,7 +308,6 @@ with torch.no_grad():
         print("TEST: BATCH %04d / %04d | LOSS %.4f" %
               (batch, num_batch_test, np.mean(loss_arr)))
 
-        # Tensorboard 저장하기
         label = fn_tonumpy(label)
         input = fn_tonumpy(fn_denorm(input, mean=0.5, std=0.5))
         output = fn_tonumpy(fn_class(output))
