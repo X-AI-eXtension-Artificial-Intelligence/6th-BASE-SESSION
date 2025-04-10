@@ -7,8 +7,8 @@ data = np.random.rand(1000, 3) * 255
 data = data.astype(int)
 
 # KMeans 모델 생성 및 훈련
-kmeans = KMeans(n_clusters=10, random_state=42)
+kmeans = KMeans(n_clusters=2, random_state=42)
 kmeans.fit(data)
-  
+
 # 모델 저장
 joblib.dump(kmeans, 'kmeans_model.pkl')

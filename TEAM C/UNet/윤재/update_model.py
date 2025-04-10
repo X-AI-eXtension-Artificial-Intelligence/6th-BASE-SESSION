@@ -139,3 +139,4 @@ class DiceBCELoss(nn.Module):
         dice_loss = 1 - dice
 
         return bce_loss + dice_loss
+

@@ -42,7 +42,7 @@ class Dataset(torch.utils.data.Dataset):
         label = label.astype(np.float32)
         inputs = inputs.astype(np.float32)
         
-# 인풋 데이터 차원이 2이면, 채널 축을 추가해줘야한다. 
+# 인풋 데이터 차원이 2이면, 채널 축을 추가. 
 # 파이토치 인풋은 (batch, 채널, 행, 열)
 
         if label.ndim == 2:  
@@ -57,7 +57,6 @@ class Dataset(torch.utils.data.Dataset):
 # transform에 할당된 class 들이 호출되면서 __call__ 함수 실행
 
         return data
-    
 
 # Transform
 
@@ -78,3 +77,32 @@ class ToTensor(object):
 
         return data
     
+
+# Data Augmentation -0408 
+
+class RandomFlip:
+    def __call__(self, data):
+        input, label = data['input'], data['label']
+        if np.random.rand() > 0.5:
+            input = np.flip(input, axis=1)
+            label = np.flip(label, axis=1)
+        if np.random.rand() > 0.5:
+            input = np.flip(input, axis=0)
+            label = np.flip(label, axis=0)
+        return {'input': input.copy(), 'label': label.copy()}
+
+class RandomRotate:
+    def __call__(self, data):
+        k = np.random.choice([0, 1, 2, 3])
+        input = np.rot90(data['input'], k, axes=(0, 1))
+        label = np.rot90(data['label'], k, axes=(0, 1))
+        return {'input': input.copy(), 'label': label.copy()}
+
+class Compose:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, data):
+        for t in self.transforms:
+            data = t(data)
+        return data

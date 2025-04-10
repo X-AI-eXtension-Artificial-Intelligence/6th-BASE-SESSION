@@ -30,9 +30,9 @@ class UNet(nn.Module):
             layers += [nn.ReLU()]
             return nn.Sequential(*layers)
 
-        # -----------------------------
+
         # Encoder (Contracting Path)
-        # -----------------------------
+
 
         # 첫 번째 인코딩 블록 (1채널 입력 → 64채널로 확장)
         self.enc1_1 = CBR2d(in_channels=1, out_channels=64)
@@ -57,9 +57,9 @@ class UNet(nn.Module):
         # Bottleneck (가장 깊은 계층)
         self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
 
-        # -----------------------------
+
         # Decoder (Expansive Path)
-        # -----------------------------
+
 
         # 디코딩 시작 - 채널 수 감소
         self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)

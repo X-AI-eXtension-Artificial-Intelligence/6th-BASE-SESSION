@@ -161,4 +161,3 @@ class GaussianBlurTensor(object):
 
         data = {'label': label, 'input': input}
         return data
-

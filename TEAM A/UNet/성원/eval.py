@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 
 from torchvision import transforms, datasets
 
-from model import UNet  # 모듈 
+from model import UNet
 import dataset 
-from util import *  # 네트워크 저장, 로드하는 함수들 
+from util import *
 
 ## 트레이닝 파라미터 설정하기
 lr = 1e-3
@@ -26,7 +26,7 @@ ckpt_dir = './checkpoint'
 log_dir = './log'
 result_dir = './results'
 
-if not os.path.exists(result_dir):  # 없으면 만들어줘 
+if not os.path.exists(result_dir):
     os.makedirs(os.path.join(result_dir, 'png'))
     os.makedirs(os.path.join(result_dir, 'numpy'))
 

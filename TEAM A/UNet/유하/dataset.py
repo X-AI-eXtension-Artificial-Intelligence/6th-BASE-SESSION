@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from torchvision import transforms
+
 ## 데이터 로더를 구현하기
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, data_dir, transform=None):  # 초기화
@@ -77,13 +79,28 @@ class RandomFlip(object): # 데이터 뒤집기
         label, input = data['label'], data['input']
 
         if np.random.rand() > 0.5: # 50% 확률로 좌우 반전 
-            label = np.fliplr(label) 
-            input = np.fliplr(input)
+            label = np.fliplr(label).copy()
+            input = np.fliplr(input).copy()
 
         if np.random.rand() > 0.5: # 50% 확률로 상하 반전 
-            label = np.flipud(label)
-            input = np.flipud(input)
+            label = np.flipud(label).copy()
+            input = np.flipud(input).copy()
 
         data = {'label': label, 'input': input}
 
         return data
+
+class RandomRotate(object):
+    def __init__(self, degrees=20):
+        self.degrees = degrees
+
+    def __call__(self, data):
+        angle = np.random.uniform(-self.degrees, self.degrees)
+
+        label, input = data['label'], data['input']
+
+        # numpy → tensor → PIL → 회전 → numpy
+        input = transforms.functional.rotate(torch.from_numpy(input), angle, fill=0).numpy()
+        label = transforms.functional.rotate(torch.from_numpy(label), angle, fill=0).numpy()
+
+        return {'input': input, 'label': label}

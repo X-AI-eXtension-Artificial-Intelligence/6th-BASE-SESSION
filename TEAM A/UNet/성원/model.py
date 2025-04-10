@@ -44,9 +44,24 @@ class UNet(nn.Module):
         self.pool4 = nn.MaxPool2d(kernel_size=2)
 
         self.enc5_1 = CBR2d(in_channels=512, out_channels=1024)
+        self.enc5_2 = CBR2d(in_channels=1024, out_channels=1024)
+
+        self.pool5 = nn.MaxPool2d(kernel_size=2)
+        
+        self.enc6_1 = CBR2d(in_channels=1024, out_channels=2048)  
+        
 
 
         # Expansive path. 확장 경로 
+        self.dec6_1 = CBR2d(in_channels=2048, out_channels=1024)
+        self.unpool5 = nn.ConvTranspose2d(in_channels=1024,
+                                        out_channels=1024, 
+                                        kernel_size=2, 
+                                        stride=2,
+                                        padding=0,
+                                        bias=True)
+
+        self.dec5_2 = CBR2d(in_channels=2 * 1024, out_channels=1024)  # skip 연결 포함
         self.dec5_1 = CBR2d(in_channels=1024, out_channels=512)  # 인코더 최종 출력 1024채널을 512채널로 줄임 
 
         self.unpool4 = nn.ConvTranspose2d(  # 공간적인 크기를 늘리는(convolution의 반대) 연산을 해주는 합성곱 레이어
@@ -103,9 +118,19 @@ class UNet(nn.Module):
         enc4_2 = self.enc4_2(enc4_1)
         pool4 = self.pool4(enc4_2)
 
-        enc5_1 = self.enc5_1(pool4)  # 수축 끝 
+        enc5_1 = self.enc5_1(pool4)  
+        enc5_2 = self.enc5_2(enc5_1)
+        pool5 = self.pool5(enc5_2)
 
-        dec5_1 = self.dec5_1(enc5_1)  # 확장 시작 
+        enc6_1 = self.enc6_1(pool5)  # 수축 끝 
+
+
+        dec6_1 = self.dec6_1(enc6_1)  # 확장 시작 
+
+        unpool5 = self.unpool5(dec6_1)
+        cat5 = torch.cat((unpool5, enc5_2), dim=1)
+        dec5_2 = self.dec5_2(cat5)
+        dec5_1 = self.dec5_1(enc5_1)  
 
         unpool4 = self.unpool4(dec5_1)
         cat4 = torch.cat((unpool4, enc4_2), dim=1)  # pooling결과와, 인코더에서 skip connec 가져오기 

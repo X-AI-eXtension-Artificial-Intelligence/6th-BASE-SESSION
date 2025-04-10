@@ -21,24 +21,29 @@ from utils import generate_dummy_data
 # 훈련 파라미터 설정하기
 lr = 1e-3
 batch_size = 4
-num_epoch = 20
+num_epoch = 300
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+data_dir = 'data'
+ckpt_dir = 'checkpoint'
+result_dir = 'result'
+log_dir = 'log'
 
 
-data_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/data'
-ckpt_dir ='/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/checkpoint'
-result_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/result'
-log_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/log'
+# data_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/data'
+# ckpt_dir ='/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/checkpoint'
+# result_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/result'
+# log_dir = '/Users/hyunseonam/Lyle/Study/Coding/X-AI/Basic/Code/U-Net/log'
 
 
-# # 디렉토리가 없으면 생성
-# os.makedirs(data_dir, exist_ok=True)
-# os.makedirs(ckpt_dir, exist_ok=True)
-# os.makedirs(log_dir, exist_ok=True)
-# os.makedirs(result_dir, exist_ok=True)
+# 디렉토리가 없으면 생성
+os.makedirs(data_dir, exist_ok=True)
+os.makedirs(ckpt_dir, exist_ok=True)
+os.makedirs(log_dir, exist_ok=True)
+os.makedirs(result_dir, exist_ok=True)
+print('파일 넘어감')
 
 mode = 'train'  # 기본값 세팅 (나중에 test 모드로도 변경 가능)
 
@@ -138,7 +143,7 @@ for epoch in range(st_epoch + 1, num_epoch +1):
     writer_train.add_image('label', label, num_batch_train * (epoch -1) + batch, dataformats ='NHWC')
     writer_train.add_image('input', input, num_batch_train * (epoch -1) + batch, dataformats ='NHWC')
     writer_train.add_image('output', output, num_batch_train * (epoch -1) + batch, dataformats ='NHWC')
-  writer_train.add_scalar('loss', np.mean(loss_arr), epoch)
+    writer_train.add_scalar('loss', np.mean(loss_arr), epoch)
 
 
   # validation
