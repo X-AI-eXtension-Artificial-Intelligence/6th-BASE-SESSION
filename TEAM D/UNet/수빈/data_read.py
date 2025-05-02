@@ -1,99 +1,44 @@
-# 필요한 패키지 등록
-import os
+import deeplake
 import numpy as np
-from PIL import Image
 import matplotlib.pyplot as plt
 
-# 데이터 불러오기
-dir_data = './datasets'
+# Deep Lake에서 데이터 로드
+train_ds = deeplake.load('hub://activeloop/drive-train')
+test_ds = deeplake.load('hub://activeloop/drive-test')
 
-name_label = 'train-labels.tif'
-name_input = 'train-volume.tif'
+print("train_ds tensors:", train_ds.tensors.keys())
+print("test_ds tensors:", test_ds.tensors.keys())
 
-img_label = Image.open(os.path.join(dir_data, name_label))
-img_input = Image.open(os.path.join(dir_data, name_input))
 
-ny, nx = img_label.size
-nframe = img_label.n_frames
 
-# 30프레임 중 24프레임은 train, 3프레임은 validation, 3프레임은 test로 할당
-nframe_train = 24
-nframe_val = 3
-nframe_test = 3
+# train 세트에서 샘플 하나 가져오기
+train_sample = train_ds[0]
+train_image = train_sample['rgb_images'].numpy() / 255.0
+train_mask = train_sample['manual_masks/mask'].numpy() / 255.0
 
-# 디렉토리 설정
-dir_save_train = os.path.join(dir_data, 'train')
-dir_save_val = os.path.join(dir_data, 'val')
-dir_save_test = os.path.join(dir_data, 'test')
+# test 세트에서 샘플 하나 가져오기
+test_sample = test_ds[0]
+test_image = test_sample['rgb_images'].numpy() / 255.0
+test_mask = test_sample['masks'].numpy() / 255.0
 
-if not os.path.exists(dir_save_train):
-    os.makedirs(dir_save_train)
+# train 시각화
+plt.figure(figsize=(10, 5))
+plt.subplot(2, 2, 1)
+plt.imshow(train_image)
+plt.title('Train Image')
 
-if not os.path.exists(dir_save_val):
-    os.makedirs(dir_save_val)
+plt.subplot(2, 2, 2)
+plt.imshow(train_mask[:, :, 0], cmap='gray')
+plt.title('Train Mask')
 
-if not os.path.exists(dir_save_test):
-    os.makedirs(dir_save_test)
+# test 시각화
+plt.subplot(2, 2, 3)
+plt.imshow(test_image)
+plt.title('Test Image')
 
-# frame에 대한 random index 설정
-id_frame = np.arange(nframe)
-np.random.shuffle(id_frame)
+plt.subplot(2, 2, 4)
+plt.imshow(test_mask[:, :, 0], cmap='gray') 
+plt.title('Test Mask')
 
-# 프레임 시작점 설정
-offset_nframe = 0
-
-# training set 저장
-for i in range(nframe_train):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)  # np.array()는 이미지를 행렬 형태로 저장하는 역할
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_train, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_train, 'input_%03d.npy' % i), input_)
-
-# validation set 저장
-offset_nframe = nframe_train
-
-for i in range(nframe_val):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_val, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_val, 'input_%03d.npy' % i), input_)
-
-# test set 저장
-offset_nframe = nframe_train + nframe_val
-
-for i in range(nframe_test):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_test, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_test, 'input_%03d.npy' % i), input_)
-
-# 시각화
-plt.subplot(121)
-plt.imshow(label_, cmap='gray')
-plt.title('label')
-
-plt.subplot(122)
-plt.imshow(input_, cmap='gray')
-plt.title('input')
-
+plt.tight_layout()
 plt.show()
-
-
-
-
-
-
-
-
