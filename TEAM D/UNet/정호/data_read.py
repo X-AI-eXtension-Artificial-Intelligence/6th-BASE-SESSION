@@ -17,9 +17,9 @@ ny, nx = img_label.size     # 이미지 높이, 너비 저장
 nframe = img_label.n_frames # 이미지의 프레임 수 저장
 
 # 데이터 set 크기 설정 (훈련, 검증, 테스트)
-nframe_train = 24 
-nframe_val = 3
-nframe_test = 3
+nframe_train = int(nframe * 0.8)
+nframe_val = int(nframe * 0.1)
+nframe_test = nframe - nframe_train - nframe_val
 
 # 데이터가 저장될 디렉토리 생성
 dir_save_train = os.path.join(dir_data, 'train')
@@ -88,10 +88,3 @@ plt.imshow(input_, cmap='gray')
 plt.title('input')
 
 plt.show()
-
-
-
-
-
-
-
