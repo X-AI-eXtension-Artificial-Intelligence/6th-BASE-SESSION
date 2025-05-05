@@ -1,102 +1,68 @@
-import argparse
-
-import os 
+import os
+from PIL import Image
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter 
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
-from model import UNet 
-from dataset import * 
-from util import * 
+from data_read import *
+from dataset import *
+from KMeans import *
+from model import *
 
-import matplotlib.pyplot as plt
+model_save_path = "./saved_model/unet_verson2_weights.pth"
 
-from torchvision import transforms, datasets
+model_ = UNet(num_classes=num_classes).to(device)
+model_.load_state_dict(torch.load(model_save_path))
+model_.eval() 
 
-parser = argparse.ArgumentParser(description="Test the UNet",
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+test_batch_size = 8
+dataset = CityscapeDataset(val_dir, label_model)
+data_loader = DataLoader(dataset, batch_size=test_batch_size, shuffle=False)
 
-parser.add_argument("--batch_size", default=4, type=int, dest="batch_size")
-parser.add_argument("--data_dir", default="./datasets", type=str, dest="data_dir")
-parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
-parser.add_argument("--result_dir", default="./result", type=str, dest="result_dir")
+save_dir = "./results"
+os.makedirs(save_dir, exist_ok=True)
 
-args = parser.parse_args()
+X, Y = next(iter(data_loader))
+X, Y = X.to(device), Y.to(device)
 
-batch_size = args.batch_size
-data_dir = args.data_dir
-ckpt_dir = args.ckpt_dir
-result_dir = args.result_dir
+with torch.no_grad():  
+    Y_pred = model_(X)
+    Y_pred = torch.argmax(Y_pred, dim=1)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+inverse_transform = transforms.Compose([
+    transforms.Normalize((-0.485/0.229, -0.456/0.224, -0.406/0.225), (1/0.229, 1/0.224, 1/0.225))
+])
 
-print("batch size: %d" % batch_size)
-print("data dir: %s" % data_dir)
-print("ckpt dir: %s" % ckpt_dir)
-print("result dir: %s" % result_dir)
+fig, axes = plt.subplots(test_batch_size, 3, figsize=(3*5, test_batch_size*5))
+iou_scores = []
 
-
-if not os.path.exists(result_dir):
-    os.makedirs(os.path.join(result_dir, 'png'))
-    os.makedirs(os.path.join(result_dir, 'numpy'))
-
-
-transform = transforms.Compose([Normalization(mean=0.5, std=0.5), ToTensor()])
-
-dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
-loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
-
-num_data_test = len(dataset_test)
-
-num_batch_test = np.ceil(num_data_test / batch_size)
+for i in range(test_batch_size):
     
-num_classes = 1
+    landscape = inverse_transform(X[i]).permute(1, 2, 0).cpu().detach().numpy()
+    label_class = Y[i].cpu().detach().numpy()
+    label_class_predicted = Y_pred[i].cpu().detach().numpy()
+    
+    intersection = np.logical_and(label_class, label_class_predicted)
+    union = np.logical_or(label_class, label_class_predicted)
+    iou_score = np.sum(intersection) / np.sum(union)
+    iou_scores.append(iou_score)
 
-net = UNet(num_classes = num_classes).to(device)
+    axes[i, 0].imshow(landscape)
+    axes[i, 0].set_title("Landscape")
+    axes[i, 1].imshow(label_class)
+    axes[i, 1].set_title("Label Class")
+    axes[i, 2].imshow(label_class_predicted)
+    axes[i, 2].set_title("Label Class - Predicted")
 
-fn_loss = nn.BCEWithLogitsLoss().to(device)
 
-fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
-fn_denorm = lambda x, mean, std: (x * std) + mean
-fn_class = lambda x: 1.0 * (x > 0.5)
+save_path = os.path.join(save_dir, "all_samples_verson2.png")
+plt.savefig(save_path)
+plt.close(fig)
 
-
-net, _, _ = load(ckpt_dir=ckpt_dir, net=net, optim=None)
-
-with torch.no_grad():
-    net.eval()
-    loss_arr = []
-
-    for batch, data in enumerate(loader_test, 1):
-        label = data['label'].to(device)
-        input = data['input'].to(device)
-
-        output = net(input)
-
-        loss = fn_loss(output, label)
-
-        loss_arr += [loss.item()]
-
-        print("TEST: BATCH %04d / %04d | LOSS %.4f" %
-                (batch, num_batch_test, np.mean(loss_arr)))
-
-        label = fn_tonumpy(label)
-        input = fn_tonumpy(fn_denorm(input, mean=0.5, std=0.5))
-        output = fn_tonumpy(fn_class(output))
-
-        for j in range(label.shape[0]):
-            id = num_batch_test * (batch - 1) + j
-
-            plt.imsave(os.path.join(result_dir, 'png', 'label_%04d.png' % id), label[j].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'png', 'input_%04d.png' % id), input[j].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'png', 'output_%04d.png' % id), output[j].squeeze(), cmap='gray')
-
-            np.save(os.path.join(result_dir, 'numpy', 'label_%04d.npy' % id), label[j].squeeze())
-            np.save(os.path.join(result_dir, 'numpy', 'input_%04d.npy' % id), input[j].squeeze())
-            np.save(os.path.join(result_dir, 'numpy', 'output_%04d.npy' % id), output[j].squeeze())
-
-print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
-        (batch, num_batch_test, np.mean(loss_arr)))
+mean_iou = np.mean(iou_scores)
+print(f"Mean IoU over {test_batch_size} samples: {mean_iou:.4f}")
