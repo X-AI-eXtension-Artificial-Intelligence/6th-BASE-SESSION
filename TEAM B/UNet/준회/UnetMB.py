@@ -8,8 +8,7 @@ import torch.nn.functional as F
 # 4) 채널 축
 
 class MBConv2d(nn.Module):
-    # 성능 향상을 위해서 expand_ratio, se_ratio 를 더 키울 수 있으나 메모리 부족으로 줄여놓은 상태태
-    def __init__(self, in_channels, out_channels, expand_ratio=2, kernel_size=3, stride=1, se_ratio=0.25):
+    def __init__(self, in_channels, out_channels, expand_ratio=2, kernel_size=3, stride=1, se_ratio=0.3):
         super(MBConv2d, self).__init__()
         
         # 확장된 채널 개수

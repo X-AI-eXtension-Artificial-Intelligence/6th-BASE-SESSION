@@ -22,7 +22,7 @@ from UNetMB import UNetMB
 
 # KMeans 모델 로드 (마스크 생성 등에 사용 가능)
 import joblib
-kmeans = joblib.load('../XAI/UNet/week-4/kmeans_model.pkl')
+kmeans = joblib.load('../XAI/UNet/week-5/kmeans_model.pkl')
 
 # 학습 루프 정의
 def train(model, loader, optimizer, criterion, num_epochs, device):
@@ -66,7 +66,7 @@ def train(model, loader, optimizer, criterion, num_epochs, device):
         print(f"Epoch {epoch+1} | Avg Loss: {avg_loss:.4f}, Avg Acc: {avg_acc:.4f}")
     
     pbar.close()
-    torch.save(model.state_dict(), "../XAI/UNet/week-4/UNetMB.pth")
+    torch.save(model.state_dict(), "../XAI/UNet/week-5/UNetMB.pth")
     print("Model saved successfully.")
 
 def main():
@@ -76,12 +76,12 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.0002)
 
     # 이미지 및 마스크 폴더 경로 설정
-    image_dir = '../XAI/UNet/week-4/dataset/train/Image'
-    mask_dir = '../XAI/UNet/week-4/dataset/train/Mask'
+    image_dir = '../XAI/UNet/week-5/dataset/train/Image'
+    mask_dir = '../XAI/UNet/week-5/dataset/train/Mask'
 
     # 데이터 로더 생성 (batch_size=2 설정)
     train_loader = get_loader(image_dir, mask_dir, kmeans, batch_size=2)
-    num_epochs = 20
+    num_epochs = 100
     train(model, train_loader, optimizer, criterion, num_epochs, device)
 
 if __name__ == '__main__':

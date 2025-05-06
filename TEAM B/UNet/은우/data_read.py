@@ -1,97 +1,30 @@
-## 필요한 패키지 등록
+from datasets import load_dataset
 import os
 import numpy as np
 from PIL import Image
-import matplotlib.pyplot as plt
 
-## 데이터 불러오기
-dir_data = './datasets'
+# 저장 경로
+data_dir = './datasets'
+dir_train = os.path.join(data_dir, 'train')
+dir_val = os.path.join(data_dir, 'val')
+dir_test = os.path.join(data_dir, 'test')
 
-name_label = 'train-labels.tif'
-name_input = 'train-volume.tif'
+# 디렉토리 생성
+for d in [dir_train, dir_val, dir_test]:
+    os.makedirs(d, exist_ok=True)
 
-img_label = Image.open(os.path.join(dir_data, name_label))
-img_input = Image.open(os.path.join(dir_data, name_input))
+# 데이터셋 로드
+dataset = load_dataset("beans")
 
-ny, nx = img_label.size
-nframe = img_label.n_frames
+# 저장
+for split_name, save_dir in zip(['train', 'validation', 'test'], [dir_train, dir_val, dir_test]):
+    split = dataset[split_name]
+    for i, item in enumerate(split):
+        img = item['image']  # 이미 PIL.Image 타입
+        img_np = np.array(img)  # numpy 배열로 변환
 
-##
-nframe_train = 24
-nframe_val = 3
-nframe_test = 3
-#데이터 저장될 디렉토리 설정 
-dir_save_train = os.path.join(dir_data, 'train')
-dir_save_val = os.path.join(dir_data, 'val')
-dir_save_test = os.path.join(dir_data, 'test')
+        label = item['labels']  # 클래스 번호 (0, 1, 2)
 
-if not os.path.exists(dir_save_train):
-    os.makedirs(dir_save_train)
-
-if not os.path.exists(dir_save_val):
-    os.makedirs(dir_save_val)
-
-if not os.path.exists(dir_save_test):
-    os.makedirs(dir_save_test)
-
-##
-id_frame = np.arange(nframe)
-np.random.shuffle(id_frame) #랜점하게 저장하기 위해 랜덤 인덱스 생성 
-
-## training set 저장하는 구문 
-offset_nframe = 0
-
-for i in range(nframe_train):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_train, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_train, 'input_%03d.npy' % i), input_)
-
-## validation set 저장하는 구문 
-offset_nframe = nframe_train #개수만 수정해주면 됨 
-
-for i in range(nframe_val):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_val, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_val, 'input_%03d.npy' % i), input_)
-
-## test set 저장하는 구문 
-offset_nframe = nframe_train + nframe_val
-
-for i in range(nframe_test):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_test, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_test, 'input_%03d.npy' % i), input_)
-
-##생성된 데이터셋 출력해보기 
-plt.subplot(121)
-plt.imshow(label_, cmap='gray')
-plt.title('label')
-
-plt.subplot(122)
-plt.imshow(input_, cmap='gray')
-plt.title('input')
-
-plt.show()
-
-
-
-
-
-
-
-
+        # 이미지와 레이블을 각각 .npy 형식으로 저장
+        np.save(os.path.join(save_dir, f"input_{i:03d}.npy"), img_np)
+        np.save(os.path.join(save_dir, f"label_{i:03d}.npy"), label)
