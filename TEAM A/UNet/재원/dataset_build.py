@@ -1,93 +1,69 @@
 """
-논문에서 언급되었던 ISBI 2012 EM Segmentation Membrane Dataset
+https://www.kaggle.com/datasets/tapakah68/supervisely-filtered-segmentation-person-dataset
+Human Segmentation Dataset
 
-train-volumne.tif 파일 -> 훈련 이미지(512*512 grayscale 세포 Image) 30장
-train-labels.tif 파일 -> 정답에 해당하는 Segmentation Map(배경과 세포를 구분하며, 배경은 1이고 세포는 255)
-test-volumne.tif 파일 -> 테스트 이미지
+train set : 2133개
+val set : 267개
+test set : 267개
 """
 
-# 라이브러리 
+import opendatasets as od
 import os
 import numpy as np
 from PIL import Image
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 
-# 데이터 불러오기
-dir_data = './dataset' #경로 설정
-name_label = 'train-labels.tif' #label 파일
-name_input = 'train-volume.tif' #train 이미지 파일
+# 1. 루트 경로
+root_path = '/home/work/XAI_BASE/BASE_5주차'
 
-img_label = Image.open(os.path.join(dir_data, name_label)) 
-img_input = Image.open(os.path.join(dir_data, name_input))
+# 2. 데이터셋 다운로드 (이미 있으면 생략)
+od.download("https://www.kaggle.com/datasets/tapakah68/supervisely-filtered-segmentation-person-dataset", data_dir=root_path)
 
-ny, nx = img_label.size
-nframe = img_label.n_frames #이미지 개수 확인
+# 3. 정확한 데이터셋 경로 (2번 중첩된 폴더 반영)
+dataset_path = os.path.join(
+    root_path,
+    'supervisely-filtered-segmentation-person-dataset',
+    'supervisely_person_clean_2667_img',
+    'supervisely_person_clean_2667_img'
+)
 
-# 이미지(frame)개수 설정
-nframe_train = 24 
-nframe_val = 3
-nframe_test = 3
+# 4. 이미지/마스크 폴더 지정
+image_dir = os.path.join(dataset_path, 'images')
+mask_dir = os.path.join(dataset_path, 'masks')
 
-# 경로명 설정(기존 dataset폴더에 하위 폴더로 train, val, test)
-# 이미지 나누어서 넣을 각 train,test,val 폴더 생성
-dir_save_train = os.path.join(dir_data, 'train')
-dir_save_val = os.path.join(dir_data, 'val')
-dir_save_test = os.path.join(dir_data, 'test')
+# 5. 파일 리스트 확인 및 정렬
+image_list = sorted(os.listdir(image_dir))
+mask_list = sorted(os.listdir(mask_dir))
 
-# 만약 기존에 따로 설정되지 않았다면 폴더 생성
-if not os.path.exists(dir_save_train):
-    os.makedirs(dir_save_train)
+# 6. train/val/test 분할
+X_train, X_temp, y_train, y_temp = train_test_split(image_list, mask_list, test_size=0.2, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
-if not os.path.exists(dir_save_val):
-    os.makedirs(dir_save_val)
+# 7. 저장 경로 생성
+save_root = os.path.join(root_path, 'npy_split')
+os.makedirs(save_root, exist_ok=True)
+for split in ['train', 'val', 'test']:
+    os.makedirs(os.path.join(save_root, split), exist_ok=True)
 
-if not os.path.exists(dir_save_test):
-    os.makedirs(dir_save_test)
+# 8. .npy 저장 함수
+def save_npy_split(x_list, y_list, split_name):
+    save_dir = os.path.join(save_root, split_name)
+    for i, (x_name, y_name) in enumerate(zip(x_list, y_list)):
+        # RGB 입력 이미지
+        img = np.asarray(Image.open(os.path.join(image_dir, x_name)).convert('RGB'))  
 
-# 전체 이미지 프레임 번호, 인덱스 배열 만들고 [0,1,2...30] -> 랜덤으로 순서를 shuffle
-id_frame = np.arange(nframe)
-np.random.shuffle(id_frame)
+        # 마스크: 흑백으로 로드 → 정규화(0~1) → 1채널로 reshape
+        mask = Image.open(os.path.join(mask_dir, y_name)).convert('L')                 
+        mask = np.array(mask).astype(np.float32) / 255.0                              
+        mask = mask[:, :, np.newaxis]                                            
 
-# tif의 멀티 프레임 이미지를 이미지 개별 파일로 분할해서 저장
-# 개별 train 이미지를 npy 파일로 저장(grayscale)
+        # 저장
+        np.save(os.path.join(save_dir, f'input_{i:04d}.npy'), img)
+        np.save(os.path.join(save_dir, f'label_{i:04d}.npy'), mask)
 
-# offset 0으로 초기 설정
-offset_nframe = 0
+    print(f"{split_name} 세트 저장 완료: {len(x_list)}개")
 
-# train 이미지 저장 - 지정 횟수만큼 반복
-for i in range(nframe_train):
-    img_label.seek(id_frame[i + offset_nframe]) # 섞인 랜덤 배열에서 i번째 프레임 이미지 선택(.seek -> 포인터만 해당 파일에 놓는 역할)
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label) #해당 인덱스 번호 label numpy array 형태로 변환
-    input_ = np.asarray(img_input) #해당 인덱스 번호 train image numpy array 형태로 변환
-
-    # 지정경로에 npy 형태로 각각 이미지, 라벨 저장
-    np.save(os.path.join(dir_save_train, 'label_%03d.npy' % i), label_) 
-    np.save(os.path.join(dir_save_train, 'input_%03d.npy' % i), input_)
-
-# valid도 동일하게 진행(offset을 nframe_train로 설정하면, train 개수 그 이후부터)
-offset_nframe = nframe_train
-
-for i in range(nframe_val):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_val, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_val, 'input_%03d.npy' % i), input_)
-
-# test 추출도 동일하게 진행(offset을 nframe_train + nframe_val로 설정하면, 나머지 3개 추출 가능)
-offset_nframe = nframe_train + nframe_val
-
-for i in range(nframe_test):
-    img_label.seek(id_frame[i + offset_nframe])
-    img_input.seek(id_frame[i + offset_nframe])
-
-    label_ = np.asarray(img_label)
-    input_ = np.asarray(img_input)
-
-    np.save(os.path.join(dir_save_test, 'label_%03d.npy' % i), label_)
-    np.save(os.path.join(dir_save_test, 'input_%03d.npy' % i), input_)
+# 9. 저장 실행
+save_npy_split(X_train, y_train, 'train')
+save_npy_split(X_val, y_val, 'val')
+save_npy_split(X_test, y_test, 'test')
