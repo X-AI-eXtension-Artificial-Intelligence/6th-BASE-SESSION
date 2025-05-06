@@ -1,59 +1,58 @@
-# 라이브러리
 import os
 import numpy as np
 import torch
-import torch.nn as nn
 
 # 학습된 네트워크 가중치 저장
-def save(ckpt_dir, net, optim, epoch):
+# 모델 저장 및 로딩, IoU 계산 함수 제공
 
-    # 없으면 경로 생성
-    if not os.path.exists(ckpt_dir):
-        os.makedirs(ckpt_dir)
-
-    # net으로 가중치 저장, optim으로 optimizer 저장 (딕셔너리 형태)
-    # 모델명에 epoch 기록 
-    torch.save({'net': net.state_dict(), 'optim': optim.state_dict()},
-               "%s/model_epoch%d.pth" % (ckpt_dir, epoch))
-
-# 네트워크 loading
-def load(ckpt_dir, net, optim):
-
-    # 만약에 저장된 경로 없으면 초기 상태이므로 epoch 0으로 초기화하고 네트워크랑 optim 상태는 그냥 그대로 return
-    if not os.path.exists(ckpt_dir):
-        epoch = 0
-        return net, optim, epoch
+def save_checkpoint(ckpt_dir, model, optimizer, epoch):
+    os.makedirs(ckpt_dir, exist_ok=True)
+    filename = os.path.join(ckpt_dir, f"model_epoch{epoch}.pth")
+    torch.save({
+        'model_state': model.state_dict(),
+        'optimizer_state': optimizer.state_dict(),
+        'epoch': epoch
+    }, filename)
 
 
-    ckpt_lst = os.listdir(ckpt_dir)
+def load_checkpoint(ckpt_dir, model, optimizer):
+    if not os.path.isdir(ckpt_dir):
+        return model, optimizer, 0
 
-    # 리스트 폴더는 있어도 저장 파일이 없으면 동일하게 초기화 하도록 기존 코드에 추가
-    if len(ckpt_lst) == 0 :
-        epoch = 0
-        return net, optim, epoch
+    ckpts = [f for f in os.listdir(ckpt_dir) if f.endswith('.pth')]
+    if not ckpts:
+        return model, optimizer, 0
 
-    # 그렇지 않으면 폴더안에 모든 저장된 모델 불러와서, epoch 번호만 필터링해서 에포크 순서대로 정렬
-    ckpt_lst = os.listdir(ckpt_dir)
-    ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    ckpts.sort(key=lambda x: int(''.join(filter(str.isdigit, x))))
+    latest_ckpt = os.path.join(ckpt_dir, ckpts[-1])
+    checkpoint = torch.load(latest_ckpt, map_location=torch.device('cpu'))
 
-    # 인덱스 -1의 가장 최근 epoch 모델 불러오기
-    dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]))
+    model.load_state_dict(checkpoint['model_state'])
+    optimizer.load_state_dict(checkpoint['optimizer_state'])
+    start_epoch = checkpoint.get('epoch', 0)
 
-    # load_state_dict로 net, optim 상태 불러오기
-    net.load_state_dict(dict_model['net'])
-    optim.load_state_dict(dict_model['optim'])
-    
-    # 파일명 내에서 문자열 split으로 epoch 번호만 추출
-    epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
+    return model, optimizer, start_epoch
 
-    return net, optim, epoch
 
-# IoU 계산 함수
-def compute_iou(pred, true):
-    intersection = np.logical_and(pred == 1, true == 1).sum() #교집합
-    union = np.logical_or(pred == 1, true == 1).sum() #합집합
-    # 객체가 하나도 없으면 IoU를 1로 처리(둘 다 배경일 경우)
+def compute_iou(pred_mask, true_mask, threshold=0.5):
+    # Numpy 변환
+    if isinstance(pred_mask, torch.Tensor):
+        pred_mask = pred_mask.detach().cpu().numpy()
+    if isinstance(true_mask, torch.Tensor):
+        true_mask = true_mask.detach().cpu().numpy()
+
+    # 예측 이진화
+    pred_bin = (pred_mask > threshold).astype(np.uint8)
+    true_bin = (true_mask > threshold).astype(np.uint8)
+
+    # Flatten
+    pred_flat = pred_bin.flatten()
+    true_flat = true_bin.flatten()
+
+    # 합,교집합 계산
+    intersection = np.logical_and(pred_flat, true_flat).sum()
+    union = np.logical_or(pred_flat, true_flat).sum()
+
     if union == 0:
         return 1.0
-    else:
-        return intersection / union
+    return intersection / union
