@@ -22,3 +22,4 @@ https://github.com/hanyoseob/youtube-cnn-002-pytorch-unet/?tab=readme-ov-file �
 
 ## 2. 층 추가(사이즈를 2048까지 확장)
 - loss: 0.6885
+
