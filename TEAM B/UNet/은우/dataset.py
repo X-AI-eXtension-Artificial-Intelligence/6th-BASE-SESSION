@@ -1,86 +1,59 @@
-import os
-import numpy as np
+from PIL import Image
+
+
+import torchvision.transforms.functional as F
+import random
 import torch
-import torch.nn as nn
+from torchvision import datasets, transforms  # datasets를 임포트해야 합니다.
+from torch.utils.data import DataLoader
 
-##데이터 로더 구현하기 
-class Dataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, transform=None):
-        self.data_dir = data_dir
-        self.transform = transform
+class Dataset:
+    def __init__(self, root_dir='./data', year='2012', image_set='train', batch_size=8, image_size=(256, 256), transform=None):
+        self.root_dir = root_dir  # 'data_dir'을 'root_dir'로 수정
+        self.year = year
+        self.image_set = image_set
+        self.batch_size = batch_size
+        self.image_size = image_size
+        self.transform = transform  # transform을 인자로 받도록 수정
 
-        lst_data = os.listdir(self.data_dir)
+        self.dataset = datasets.VOCSegmentation(root=self.root_dir, year=self.year, image_set=self.image_set, download=True)
 
-        lst_label = [f for f in lst_data if f.startswith('label')]
-        lst_input = [f for f in lst_data if f.startswith('input')]
+    def __getitem__(self, index):
+        img, label = self.dataset[index]
+        
+        if self.transform:
+            img = self.transform(img)
 
-        lst_label.sort()
-        lst_input.sort()
+        return img, label
 
-        self.lst_label = lst_label
-        self.lst_input = lst_input
+    def get_data_loader(self):
+        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
 
     def __len__(self):
-        return len(self.lst_label)
-
-    def __getitem__(self, index): #인덱스에 해당하는 파일 로드하기 
-        label = np.load(os.path.join(self.data_dir, self.lst_label[index]))
-        input = np.load(os.path.join(self.data_dir, self.lst_input[index]))
-
-        label = label/255.0 #0~1사이로 norm해주기 위해 
-        input = input/255.0
-
-        if label.ndim == 2:
-            label = label[:, :, np.newaxis] #라벨의 마지막 엑시스 임의로 생성하는 함수 
-        if input.ndim == 2:
-            input = input[:, :, np.newaxis]
-
-        data = {'input': input, 'label': label}
-
-        if self.transform:
-            data = self.transform(data)
-
-        return data
+        return len(self.dataset)
 
 
-## 트렌스폼 구현하기
-class ToTensor(object): #넘파이에서 텐서로 트렌스폼하는 
-    def __call__(self, data):
-        label, input = data['label'], data['input']
+class RandomFlip(object):
+    def __call__(self, img):
+        # img는 PIL.Image 또는 Tensor여야 함
+        if random.random() > 0.5:
+            img = F.hflip(img)
+        if random.random() > 0.5:
+            img = F.vflip(img)
+        return img
 
-        label = label.transpose((2, 0, 1)).astype(np.float32)
-        input = input.transpose((2, 0, 1)).astype(np.float32)
+class ToTensor(object):
+    def __call__(self, img):
+        return F.to_tensor(img)  # PIL → Tensor
 
-        data = {'label': torch.from_numpy(label), 'input': torch.from_numpy(input)}
-
-        return data
 
 class Normalization(object):
-    def __init__(self, mean=0.5, std=0.5):
+    def __init__(self, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
         self.mean = mean
         self.std = std
 
-    def __call__(self, data):
-        label, input = data['label'], data['input']
+    def __call__(self, img):
+        if isinstance(img, Image.Image):
+            img = transforms.ToTensor()(img)
+        return transforms.Normalize(mean=self.mean, std=self.std)(img)
 
-        input = (input - self.mean) / self.std
-
-        data = {'label': label, 'input': input}
-
-        return data
-
-class RandomFlip(object):
-    def __call__(self, data):
-        label, input = data['label'], data['input']
-
-        if np.random.rand() > 0.5:
-            label = np.fliplr(label)
-            input = np.fliplr(input)
-
-        if np.random.rand() > 0.5:
-            label = np.flipud(label)
-            input = np.flipud(input)
-        #데이터 딕셔너리로 묶어주기 
-        data = {'label': label, 'input': input}
-
-        return data
