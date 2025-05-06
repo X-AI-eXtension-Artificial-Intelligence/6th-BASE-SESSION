@@ -20,6 +20,7 @@ class UNet(nn.Module):
             #relu 정의
             layers += [nn.ReLU()]
 
+
             cbr = nn.Sequential(*layers)
 
             return cbr
