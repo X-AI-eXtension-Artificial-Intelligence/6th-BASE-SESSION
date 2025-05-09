@@ -160,4 +160,4 @@ with torch.no_grad():
 print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
       (batch, num_batch_test, np.mean(loss_arr)))
 
-# Test Error: 0.1758
+# loss = 0.0671

@@ -28,3 +28,12 @@ def load(ckpt_dir, net, optim):
     epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])# 저장된 epoch 번호를 숫자로 뽑아서 epoch 변수에 저장 (학습을 이어서 하기 위함)
 
     return net, optim, epoch
+
+import torchvision.transforms as transforms
+
+def get_transforms():
+    return transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+    ])

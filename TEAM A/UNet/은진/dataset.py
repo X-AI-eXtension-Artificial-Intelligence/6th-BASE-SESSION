@@ -1,97 +1,62 @@
-# 📁 Step 2: dataset.py 😍
-# 커스텀 PyTorch Dataset 클래스 및 Transform 정의
-
 import os
 import numpy as np
 import torch
+from torch.utils.data import Dataset
+from PIL import Image
 
-# 커스텀 데이터셋 클래스 정의
-class Dataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, transform=None):
-        self.data_dir = data_dir
+class NucleiDataset(Dataset):
+    def __init__(self, root_dir, image_ids, transform=None, target_size=(256,256)):
+        self.root_dir = root_dir
+        self.image_ids = image_ids
         self.transform = transform
-
-        lst_data = os.listdir(self.data_dir)  # 폴더 내 모든 파일 목록
-
-        # 파일 이름에서 label과 input만 분리
-        lst_label = [f for f in lst_data if f.startswith('label')]
-        lst_input = [f for f in lst_data if f.startswith('input')]
-
-        lst_label.sort()
-        lst_input.sort()
-
-        self.lst_label = lst_label
-        self.lst_input = lst_input
+        self.target_size = target_size
 
     def __len__(self):
-        return len(self.lst_label)
+        return len(self.image_ids)
 
-    def __getitem__(self, index):
-        label = np.load(os.path.join(self.data_dir, self.lst_label[index]))
-        input = np.load(os.path.join(self.data_dir, self.lst_input[index]))
+    def __getitem__(self, idx):
+        image_id = self.image_ids[idx]
+        img_path = os.path.join(self.root_dir, image_id, 'images', f'{image_id}.png')
+        mask_dir = os.path.join(self.root_dir, image_id, 'masks')
 
-        # 0~255 → 0~1로 정규화
-        label = label / 255.0
-        input = input / 255.0
+        # 이미지
+        image = Image.open(img_path).convert('RGB').resize(self.target_size, Image.BILINEAR)
+        image = np.array(image, dtype=np.float32) / 255.0
+        image = image.transpose(2, 0, 1)  # (C, H, W)
 
-        # 채널 차원 추가 (2D → 3D)
-        if label.ndim == 2:
-            label = label[:, :, np.newaxis]
-        if input.ndim == 2:
-            input = input[:, :, np.newaxis]
+        # 마스크 여러 장을 하나로 합치고 리사이즈
+        mask = np.zeros(self.target_size, dtype=np.float32)
+        if os.path.exists(mask_dir):
+            for mask_file in os.listdir(mask_dir):
+                mask_path = os.path.join(mask_dir, mask_file)
+                mask_inst = Image.open(mask_path).convert('L').resize(self.target_size, Image.NEAREST)
+                mask = np.maximum(mask, np.array(mask_inst, dtype=np.float32) / 255.0)
+        mask = mask[None, ...]  # (1, H, W)
 
-        data = {'input': input, 'label': label}
-
-        # Transform이 정의되어 있으면 적용
         if self.transform:
-            data = self.transform(data)
+            image, mask = self.transform(image, mask)
 
-        return data
+        return {
+            'input': torch.tensor(image, dtype=torch.float32),
+            'label': torch.tensor(mask, dtype=torch.float32)
+        }
 
+class NucleiTestDataset(Dataset):
+    def __init__(self, root_dir, image_ids, target_size=(256,256)):
+        self.root_dir = root_dir
+        self.image_ids = image_ids
+        self.target_size = target_size
 
-# Transform: numpy → torch tensor
-class ToTensor(object):
-    def __call__(self, data):
-        label, input = data['label'], data['input']
+    def __len__(self):
+        return len(self.image_ids)
 
-        # (H, W, C) → (C, H, W), float32로 변환
-        label = label.transpose((2, 0, 1)).astype(np.float32)
-        input = input.transpose((2, 0, 1)).astype(np.float32)
-
-        data = {'label': torch.from_numpy(label), 'input': torch.from_numpy(input)}
-
-        return data
-
-
-# Transform: 정규화
-class Normalization(object):
-    def __init__(self, mean=0.5, std=0.5):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, data):
-        label, input = data['label'], data['input']
-
-        input = (input - self.mean) / self.std
-
-        data = {'label': label, 'input': input}
-
-        return data
-
-
-# Transform: 좌우/상하 랜덤 플립
-class RandomFlip(object):
-    def __call__(self, data):
-        label, input = data['label'], data['input']
-
-        if np.random.rand() > 0.5:
-            label = np.fliplr(label)
-            input = np.fliplr(input)
-
-        if np.random.rand() > 0.5:
-            label = np.flipud(label)
-            input = np.flipud(input)
-
-        data = {'label': label, 'input': input}
-
-        return data
+    def __getitem__(self, idx):
+        image_id = self.image_ids[idx]
+        img_path = os.path.join(self.root_dir, image_id, 'images', f'{image_id}.png')
+        image = Image.open(img_path).convert('RGB').resize(self.target_size, Image.BILINEAR)
+        image = np.array(image, dtype=np.float32) / 255.0
+        image = image.transpose(2, 0, 1)
+        return {
+            'input': torch.tensor(image, dtype=torch.float32),
+            'image_id': image_id
+        }

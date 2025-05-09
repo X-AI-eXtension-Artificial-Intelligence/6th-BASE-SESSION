@@ -27,7 +27,7 @@ class UNet(nn.Module):
         self.num_classes = num_classes
 
         # Contracting path (Encoder with residual blocks)
-        self.enc1_1 = ResidualCBR2d(1, 64)
+        self.enc1_1 = ResidualCBR2d(3, 64)
         self.enc1_2 = ResidualCBR2d(64, 64)
         self.pool1 = nn.MaxPool2d(2)
 

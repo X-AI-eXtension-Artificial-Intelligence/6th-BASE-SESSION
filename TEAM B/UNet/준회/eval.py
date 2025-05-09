@@ -9,20 +9,20 @@ from UNetMB import UNetMB  # 모델
 import os
 import joblib
 from sklearn.cluster import KMeans
-kmeans = joblib.load('../XAI/UNet/week-4/kmeans_model.pkl')
+kmeans = joblib.load('../XAI/UNet/week-5/kmeans_model.pkl')
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # 모델 로드
-    model_name = '../XAI/UNet/week-4/UNetMB.pth'
+    model_name = '../XAI/UNet/week-5/UNetMB.pth'
     model = UNetMB().to(device) 
     model.load_state_dict(torch.load(model_name))
 
     # 데이터셋 및 데이터 로더 설정
-    val_image_dir = '../XAI/UNet/week-4/dataset/val/Image'  # 검증 이미지 데이터셋 경로
-    val_mask_dir = '../XAI/UNet/week-4/dataset/val/Mask'    # 검증 마스크 데이터셋 경로
-    test_batch_size = 1
+    val_image_dir = '../XAI/UNet/week-5/dataset/val/Image'  # 검증 이미지 데이터셋 경로
+    val_mask_dir = '../XAI/UNet/week-5/dataset/val/Mask'    # 검증 마스크 데이터셋 경로
+    test_batch_size = 2
     data_loader = get_loader(val_image_dir, val_mask_dir, kmeans, batch_size=test_batch_size)
 
     X, Y = next(iter(data_loader))
@@ -52,10 +52,9 @@ def main():
         iou_score = np.sum(intersection) / np.sum(union)
         iou_scores.append(iou_score)
 
-        # 1개 배치일 경우 axes[i]가 아니라 axes 사용
-        ax0 = axes[i, 0] if test_batch_size > 1 else axes[0]
-        ax1 = axes[i, 1] if test_batch_size > 1 else axes[1]
-        ax2 = axes[i, 2] if test_batch_size > 1 else axes[2]
+        ax0 = axes[i, 0]
+        ax1 = axes[i, 1]
+        ax2 = axes[i, 2]
 
         ax0.imshow(landscape)
         ax0.set_title("Landscape")

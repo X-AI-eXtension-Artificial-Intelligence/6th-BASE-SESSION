@@ -4,7 +4,10 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
+# 경량화 U-Net
+# 전반적으로 채널 수를 반으로 줄임
+# 경량화를 통해 학습의 안정성을 부여하고 속도를 개선시키고자 함
 # U-NET 네트워크 구축  
 class UNet(nn.Module):
     def __init__(self):
@@ -16,7 +19,7 @@ class UNet(nn.Module):
             # 2D Convolution layer
             layers += [nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
                                  kernel_size=kernel_size, stride=stride, padding=padding,
-                                 bias=bias)]\
+                                 bias=bias)]
                                  
             ### BatchNorm → GroupNorm ###
             # 기존 BatchNorm은 배치 단위로 평균/분산 계산하여 정규화.
@@ -35,22 +38,22 @@ class UNet(nn.Module):
 
         # Contracting path
         # kernel_size, stride, padding, bias는 미리 설정해뒀으니 생략
-        self.enc1_1 = CBR2d(in_channels=1, out_channels=32)  # 입/출력 채널 개수 설정
-        self.enc1_2 = CBR2d(in_channels=32, out_channels=32) # 입/출력 채널 개수 설정
+        self.enc1_1 = CBR2d(in_channels=3, out_channels=32)   # out_channels 64 → 32 (채널 수 감소, 경량화)
+        self.enc1_2 = CBR2d(in_channels=32, out_channels=32)  # out_channels 64 → 32 
 
-        self.pool1 = nn.MaxPool2d(kernel_size=2)             # Max pooling 진행(2X2)
+        self.pool1 = nn.MaxPool2d(kernel_size=2)             
 
-        self.enc2_1 = CBR2d(in_channels=32, out_channels=64)
+        self.enc2_1 = CBR2d(in_channels=32, out_channels=64)   # out_channels 128 → 64
         self.enc2_2 = CBR2d(in_channels=64, out_channels=64)
 
         self.pool2 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc3_1 = CBR2d(in_channels=64, out_channels=128)
+        self.enc3_1 = CBR2d(in_channels=64, out_channels=128)  # out_channels 256 → 128
         self.enc3_2 = CBR2d(in_channels=128, out_channels=128)
 
         self.pool3 = nn.MaxPool2d(kernel_size=2)
 
-        self.enc4_1 = CBR2d(in_channels=128, out_channels=256)
+        self.enc4_1 = CBR2d(in_channels=128, out_channels=256)   # enc4_2 제거 → 인코더 depth 축소
 
         # Expansive path
         self.dec4_1 = CBR2d(in_channels=256, out_channels=128)
@@ -87,16 +90,25 @@ class UNet(nn.Module):
 
         dec4_1 = self.dec4_1(enc4_1)
         unpool3 = self.unpool3(dec4_1)
+        # ↓↓↓ 수정: 크기 mismatch 방지
+        if unpool3.size()[2:] != enc3_2.size()[2:]:
+            unpool3 = F.interpolate(unpool3, size=enc3_2.size()[2:], mode='bilinear', align_corners=False)
         cat3 = torch.cat((unpool3, enc3_2), dim=1)
 
         dec3_2 = self.dec3_2(cat3)
         dec3_1 = self.dec3_1(dec3_2)
         unpool2 = self.unpool2(dec3_1)
+        # ↓↓↓ 수정: 크기 mismatch 방지
+        if unpool2.size()[2:] != enc2_2.size()[2:]:
+            unpool2 = F.interpolate(unpool2, size=enc2_2.size()[2:], mode='bilinear', align_corners=False)
         cat2 = torch.cat((unpool2, enc2_2), dim=1)
 
         dec2_2 = self.dec2_2(cat2)
         dec2_1 = self.dec2_1(dec2_2)
         unpool1 = self.unpool1(dec2_1)
+        # ↓↓↓ 수정: 크기 mismatch 방지
+        if unpool1.size()[2:] != enc1_2.size()[2:]:
+            unpool1 = F.interpolate(unpool1, size=enc1_2.size()[2:], mode='bilinear', align_corners=False)
         cat1 = torch.cat((unpool1, enc1_2), dim=1)
 
         dec1_2 = self.dec1_2(cat1)

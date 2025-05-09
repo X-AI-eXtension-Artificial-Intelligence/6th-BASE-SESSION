@@ -1,93 +1,58 @@
-# 📁 Step 5: eval.py 🤗
-# 학습된 모델을 불러와 테스트 데이터에 대한 예측 수행 및 결과 저장
-
-import os
-import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
-from torchvision import transforms
-
+import pandas as pd
+from utils import rle_decode
+from dataset import NucleiDataset
 from model import UNet
-from dataset import *
-from util import *
+import os
+import torch
+from torch.utils.data import DataLoader
+import numpy as np
 
-# 하이퍼파라미터 설정
-lr = 1e-3
-batch_size = 4
-num_epoch = 100
 
-# 경로 설정 (Colab 기반 경로 예시)
-data_dir = './datasets'
-ckpt_dir = './checkpoint'
-log_dir = './log'
-result_dir = './results'
+# 테스트셋 준비
+test_root = './datasets/stage1_test'
+solution_df = pd.read_csv('./datasets/stage1_solution.csv')
 
-# 결과 저장 폴더 없으면 생성
-if not os.path.exists(result_dir):
-    os.makedirs(os.path.join(result_dir, 'png'))
-    os.makedirs(os.path.join(result_dir, 'numpy'))
+test_ids = [d for d in os.listdir(test_root) if os.path.isdir(os.path.join(test_root, d))]
+test_dataset = NucleiDataset(test_root, test_ids)
+test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-# GPU 사용 여부 설정
+def iou_score(pred, target, eps=1e-7):
+    pred = (pred > 0.5).astype(np.float32) 
+    target = (target > 0.5).astype(np.float32) 
+    intersection = (pred * target).sum()
+    union = pred.sum() + target.sum() - intersection
+    return (intersection + eps) / (union + eps)
+
+def dice_coef(pred, target, eps=1e-7):
+    pred = (pred > 0.5).astype(np.float32)
+    target = (target > 0.5).astype(np.float32)
+    inter = (pred * target).sum()
+    return (2 * inter + eps) / (pred.sum() + target.sum() + eps)
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = UNet().to(device)
+model.eval()
 
-# 네트워크, 손실함수, 옵티마이저 정의
-net = UNet().to(device)
-fn_loss = nn.BCEWithLogitsLoss().to(device)
-optim = torch.optim.Adam(net.parameters(), lr=lr)
+dice_scores = []
+iou_scores = []
 
-# Transform 정의 (테스트에는 augmentation 제외)
-transform = transforms.Compose([
-    Normalization(mean=0.5, std=0.5),
-    ToTensor()
-])
+for i, data in enumerate(test_loader):
+    image_id = test_ids[i]
+    x = data['input'].to(device)
+    with torch.no_grad():
+        y_hat = model(x)
+    pred_mask = (y_hat[0,0].cpu().numpy() > 0.5).astype(np.uint8)
+    # 정답 RLE 복원
+    rle_list = solution_df[solution_df['ImageId']==image_id]['EncodedPixels']
+    gt_mask = np.zeros(pred_mask.shape, dtype=np.uint8)
+    for rle in rle_list:
+        gt_mask |= rle_decode(rle, pred_mask.shape)
 
-# 테스트 데이터셋 로딩
-dataset_test = Dataset(data_dir=os.path.join(data_dir, 'test'), transform=transform)
-loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
+    # IoU, Dice 계산
+    iou = iou_score(pred_mask, gt_mask)
+    dice = dice_coef(pred_mask, gt_mask)
+    iou_scores.append(iou)
+    dice_scores.append(dice)
 
-# 부수 함수들 정의
-to_numpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
-denorm = lambda x, mean, std: (x * std) + mean
-binarize = lambda x: 1.0 * (x > 0.5)
-
-# 체크포인트에서 모델 불러오기
-net, optim, st_epoch = load(ckpt_dir=ckpt_dir, net=net, optim=optim)
-
-# 테스트 시작
-with torch.no_grad():
-    net.eval()
-    loss_arr = []
-
-    for batch, data in enumerate(loader_test, 1):
-        label = data['label'].to(device)
-        input = data['input'].to(device)
-        output = net(input)
-
-        loss = fn_loss(output, label)
-        loss_arr += [loss.item()]
-
-        print("TEST: BATCH %04d / %04d | LOSS %.4f" %
-              (batch, np.ceil(len(dataset_test)/batch_size), np.mean(loss_arr)))
-
-        label = to_numpy(label)
-        input = to_numpy(denorm(input, mean=0.5, std=0.5))
-        output = to_numpy(binarize(output))
-
-        for j in range(label.shape[0]):
-            id = int(np.ceil(len(dataset_test)/batch_size)) * (batch - 1) + j
-
-            # PNG 저장
-            plt.imsave(os.path.join(result_dir, 'png', f'label_{id:04d}.png'), label[j].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'png', f'input_{id:04d}.png'), input[j].squeeze(), cmap='gray')
-            plt.imsave(os.path.join(result_dir, 'png', f'output_{id:04d}.png'), output[j].squeeze(), cmap='gray')
-
-            # NumPy 저장
-            np.save(os.path.join(result_dir, 'numpy', f'label_{id:04d}.npy'), label[j].squeeze())
-            np.save(os.path.join(result_dir, 'numpy', f'input_{id:04d}.npy'), input[j].squeeze())
-            np.save(os.path.join(result_dir, 'numpy', f'output_{id:04d}.npy'), output[j].squeeze())
-
-# 전체 평균 손실 출력
-print("AVERAGE TEST: BATCH %04d / %04d | LOSS %.4f" %
-      (batch, np.ceil(len(dataset_test)/batch_size), np.mean(loss_arr)))
+print(f"\n평균 Dice: {np.mean(dice_scores):.4f}")
+print(f"평균 IoU: {np.mean(iou_scores):.4f}")

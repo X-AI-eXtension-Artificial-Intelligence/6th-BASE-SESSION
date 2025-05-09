@@ -8,16 +8,15 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from model import AttentionUNet, DiceLoss
-from dataset import Dataset, Normalization, RandomFlip, ToTensor
 from util import save, load, fn_tonumpy, fn_denorm, fn_class
-from dataset import RandomRotate, AddNoise
+from dataset import Dataset, Normalization, RandomFlip, ToTensor, RandomRotate, AddNoise, Resize
 
 # argparse 설정
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', type=float, default=1e-3)
 parser.add_argument('--batch_size', type=int, default=4)
 parser.add_argument('--num_epoch', type=int, default=100)
-parser.add_argument('--data_dir', type=str, default='./datasets')
+parser.add_argument('--data_dir', type=str, default='./datasets/Kvasir-SEG')
 parser.add_argument('--ckpt_dir', type=str, default='./checkpoint')
 parser.add_argument('--log_dir', type=str, default='./log')
 parser.add_argument('--result_dir', type=str, default='./results')
@@ -28,21 +27,31 @@ args = parser.parse_args()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # 디렉토리 생성
-if not os.path.exists(args.result_dir):
-    os.makedirs(os.path.join(args.result_dir, 'png'))
-    os.makedirs(os.path.join(args.result_dir, 'numpy'))
+for dir_path in [args.result_dir, args.ckpt_dir, args.log_dir]:
+    os.makedirs(os.path.join(dir_path, 'png'), exist_ok=True)
+    os.makedirs(os.path.join(dir_path, 'numpy'), exist_ok=True)
 
 # 데이터셋 및 DataLoader
+# ✅ 1000개의 데이터 train : 700장 딥러닝 치고는 작아서 증강필요함
 transform = transforms.Compose([
-    RandomFlip(),
-    RandomRotate(),
-    AddNoise(),
-    Normalization(mean=0.5, std=0.5),
-    ToTensor()
+    Resize((256, 256)),  # ✅ 원하는 크기로 리사이즈 : 크기 불일치 문제 해
+    RandomFlip(),        # 데이터 증강: 랜덤 플립
+    RandomRotate(),      # 데이터 증강: 랜덤 회전
+    AddNoise(),          # 데이터 증강: 가우시안 노이즈
+    Normalization(mean=0.5, std=0.5),  # 표준화
+    ToTensor()           # numpy → Tensor 변환
 ])
 
-train_dataset = Dataset(data_dir=os.path.join(args.data_dir, 'train'), transform=transform)
-val_dataset = Dataset(data_dir=os.path.join(args.data_dir, 'val'), transform=transform)
+train_dataset = Dataset(
+    data_dir=os.path.join(args.data_dir, 'train'),
+    transform=transform,
+    mode='image'  # ✅ 이미지 폴더 기반 데이터셋
+)
+val_dataset = Dataset(
+    data_dir=os.path.join(args.data_dir, 'val'),
+    transform=transform,
+    mode='image'  # ✅ 이미지 폴더 기반 데이터셋
+)
 
 train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
@@ -79,7 +88,7 @@ for epoch in range(st_epoch + 1, args.num_epoch + 1):
         loss.backward()
         optim.step()
 
-        loss_arr += [loss.item()]
+        loss_arr.append(loss.item())
 
         print(f"TRAIN: EPOCH {epoch:04d} | BATCH {batch:04d} | LOSS {np.mean(loss_arr):.4f}")
 
@@ -96,7 +105,7 @@ for epoch in range(st_epoch + 1, args.num_epoch + 1):
 
     # 검증 루프
     net.eval()
-    loss_arr = []
+    val_loss_arr = []
     with torch.no_grad():
         for batch, data in enumerate(val_loader, 1):
             label = data['label'].to(device)
@@ -104,9 +113,9 @@ for epoch in range(st_epoch + 1, args.num_epoch + 1):
 
             output = net(input)
             loss = fn_loss(output, label)
-            loss_arr += [loss.item()]
+            val_loss_arr.append(loss.item())
 
-            print(f"VALID: EPOCH {epoch:04d} | BATCH {batch:04d} | LOSS {np.mean(loss_arr):.4f}")
+            print(f"VALID: EPOCH {epoch:04d} | BATCH {batch:04d} | LOSS {np.mean(val_loss_arr):.4f}")
 
             input_np = fn_tonumpy(fn_denorm(input, 0.5, 0.5))
             label_np = fn_tonumpy(label)
@@ -116,7 +125,7 @@ for epoch in range(st_epoch + 1, args.num_epoch + 1):
             writer_val.add_image('label', label_np, epoch * batch, dataformats='NHWC')
             writer_val.add_image('output', output_np, epoch * batch, dataformats='NHWC')
 
-    writer_val.add_scalar('loss', np.mean(loss_arr), epoch)
+    writer_val.add_scalar('loss', np.mean(val_loss_arr), epoch)
 
     # 주기적 저장
     if epoch % 50 == 0:

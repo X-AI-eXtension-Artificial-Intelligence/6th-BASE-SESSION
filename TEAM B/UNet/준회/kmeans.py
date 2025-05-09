@@ -11,4 +11,4 @@ kmeans = KMeans(n_clusters=2, random_state=42)
 kmeans.fit(data)
 
 # 모델 저장
-joblib.dump(kmeans, 'kmeans_model.pkl')
+joblib.dump(kmeans, './UNet/week-5/kmeans_model.pkl')
