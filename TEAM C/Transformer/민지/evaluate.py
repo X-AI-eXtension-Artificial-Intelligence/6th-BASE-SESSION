@@ -37,9 +37,11 @@ def evaluate(model, iterator, loss_func, tokenizer, batch_size):
                     pred_ids = output[j].argmax(dim=-1).tolist()
                     pred_words = tokenizer.convert_ids_to_tokens(pred_ids)
 
-                    trg_sentence = ' '.join(trg_words).replace('<pad>', '').strip()
-                    out_sentence = ' '.join(pred_words).replace('<pad>', '').strip()
-
+                    trg_sentence = ' '.join(trg_words).replace('[PAD]', '').replace('[CLS]', '').replace('[SEP]', '').replace('[UNK]', '').strip()
+                    out_sentence = ' '.join(pred_words).replace('[PAD]', '').replace('[CLS]', '').replace('[SEP]', '').replace('[UNK]', '').strip()
+                    print('trg_sentence: ',trg_sentence)
+                    print('out_sentence : ', out_sentence)
+                    print('===================')
                     bleu = sentence_bleu([trg_sentence.split()], out_sentence.split(), smoothing_function=smoothie)
                     total_bleu.append(bleu)
                 except Exception as e:
