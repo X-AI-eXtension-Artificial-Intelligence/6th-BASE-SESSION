@@ -1,0 +1,192 @@
+# Transformer Implementation
+
+This repository contains a PyTorch implementation of the Transformer architecture as described in the paper "Attention Is All You Need" (Vaswani et al., 2017).
+
+## Architecture
+
+The implementation includes all the key components of the Transformer:
+
+1. **Multi-Head Attention**
+   - Scaled Dot-Product Attention
+   - Multi-Head Attention mechanism
+
+2. **Position-wise Feed-Forward Networks**
+   - Two linear transformations with a ReLU activation in between
+
+3. **Positional Encoding**
+   - Sinusoidal positional encodings
+
+4. **Encoder and Decoder Layers**
+   - Encoder: Self-attention + Feed-forward
+   - Decoder: Self-attention + Cross-attention + Feed-forward
+
+5. **Complete Transformer Model**
+   - Stacked encoder and decoder layers
+   - Input/output embeddings
+   - Final linear layer
+
+## Files
+
+- `attention.py`: Implementation of attention mechanisms
+- `feed_forward.py`: Position-wise feed-forward networks and positional encoding
+- `transformer_layers.py`: Encoder and decoder layer implementations
+- `transformer.py`: Complete Transformer model
+- `example.py`: Example usage of the Transformer model
+
+## Requirements
+
+- PyTorch >= 2.0.0
+- NumPy >= 1.21.0
+- Matplotlib >= 3.4.0
+
+## Usage
+
+1. Install the required packages:
+```bash
+pip install -r requirements.txt
+```
+
+2. Run the example script:
+```bash
+python example.py
+```
+
+## Model Parameters
+
+The Transformer model can be configured with the following parameters:
+
+- `src_vocab_size`: Size of the source vocabulary
+- `tgt_vocab_size`: Size of the target vocabulary
+- `d_model`: Model dimension (default: 512)
+- `num_heads`: Number of attention heads (default: 8)
+- `num_encoder_layers`: Number of encoder layers (default: 6)
+- `num_decoder_layers`: Number of decoder layers (default: 6)
+- `d_ff`: Feed-forward dimension (default: 2048)
+- `max_seq_length`: Maximum sequence length (default: 5000)
+- `dropout`: Dropout rate (default: 0.1)
+
+## Example
+
+```python
+from transformer import Transformer
+
+# Create model
+model = Transformer(
+    src_vocab_size=10000,
+    tgt_vocab_size=10000,
+    d_model=512,
+    num_heads=8,
+    num_encoder_layers=6,
+    num_decoder_layers=6,
+    d_ff=2048,
+    dropout=0.1
+)
+
+# Forward pass
+output = model(src, tgt)
+```
+
+## References
+
+- Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., ... & Polosukhin, I. (2017). Attention is all you need. In Advances in neural information processing systems (pp. 5998-6008).
+
+---
+
+# Transformer 구현 요약 (Implementation Summary in Korean)
+
+### 1. 전체 구조
+Transformer 모델은 크게 다음과 같은 파일들로 구성되어 있습니다:
+
+1. `attention.py`: 어텐션 메커니즘 구현
+2. `feed_forward.py`: 피드포워드 네트워크와 위치 인코딩 구현
+3. `transformer_layers.py`: 인코더와 디코더 레이어 구현
+4. `transformer.py`: 전체 Transformer 모델 구현
+5. `example.py`: 사용 예제
+6. `model_diagram.py`: 모델 구조 시각화
+
+### 2. 주요 컴포넌트별 구현
+
+#### 2.1 어텐션 메커니즘 (`attention.py`)
+```python
+- ScaledDotProductAttention 클래스
+  - 쿼리(Q), 키(K), 값(V)를 입력받아 어텐션 계산
+  - 마스킹 지원
+  - 스케일링된 내적 연산 수행
+
+- MultiHeadAttention 클래스
+  - 여러 개의 어텐션 헤드로 나누어 병렬 처리
+  - 각 헤드별로 Q, K, V를 독립적으로 처리
+  - 최종 결과를 결합하여 출력
+```
+
+#### 2.2 피드포워드 네트워크와 위치 인코딩 (`feed_forward.py`)
+```python
+- PositionWiseFeedForward 클래스
+  - 두 개의 선형 변환과 ReLU 활성화 함수 사용
+  - 드롭아웃 적용
+
+- PositionalEncoding 클래스
+  - 사인과 코사인 함수를 사용한 위치 정보 인코딩
+  - 시퀀스의 위치 정보를 임베딩에 추가
+```
+
+#### 2.3 인코더와 디코더 레이어 (`transformer_layers.py`)
+```python
+- EncoderLayer 클래스
+  - 셀프 어텐션
+  - 피드포워드 네트워크
+  - 레이어 정규화
+  - 잔차 연결
+
+- DecoderLayer 클래스
+  - 셀프 어텐션
+  - 크로스 어텐션
+  - 피드포워드 네트워크
+  - 레이어 정규화
+  - 잔차 연결
+```
+
+#### 2.4 전체 Transformer 모델 (`transformer.py`)
+```python
+- Transformer 클래스
+  - 입력/출력 임베딩
+  - 위치 인코딩
+  - 인코더 스택 (6개 레이어)
+  - 디코더 스택 (6개 레이어)
+  - 출력 레이어
+  - 마스킹 처리
+```
+
+### 3. 데이터 흐름
+
+1. **입력 처리**
+   - 입력 토큰 → 임베딩 → 위치 인코딩 추가
+
+2. **인코더 처리**
+   - 셀프 어텐션으로 입력 시퀀스 내 관계 학습
+   - 피드포워드 네트워크로 변환
+   - 레이어 정규화와 잔차 연결
+
+3. **디코더 처리**
+   - 셀프 어텐션으로 출력 시퀀스 내 관계 학습
+   - 크로스 어텐션으로 인코더 출력과 연결
+   - 피드포워드 네트워크로 변환
+   - 레이어 정규화와 잔차 연결
+
+4. **출력 처리**
+   - 최종 선형 레이어를 통한 출력 생성
+
+### 4. 시각화 (`model_diagram.py`)
+- matplotlib을 사용하여 모델 구조를 시각화
+- 각 컴포넌트를 다른 색상으로 구분
+- 데이터 흐름을 화살표로 표시
+- 잔차 연결을 점선으로 표시
+
+### 5. 사용 예제 (`example.py`)
+```python
+- 모델 초기화
+- 더미 데이터 생성
+- 순전파 수행
+- 손실 함수 계산
+- 역전파 및 최적화
+```
