@@ -1,0 +1,9 @@
+# Todo
+1. Positional Encoding
+2. Multihead attention
+3. Feed forward
+4. Residual connection
+5. Layer normalization
+6. Masking
+7. Embedding
+
