@@ -5,145 +5,293 @@
 """
 import math
 import time
+import torch
 
 from torch import nn, optim
 from torch.optim import Adam
-
-from data import *
+from data import train_loader, src_vocab, trg_vocab  # 변경된 위치로부터 직접 가져옴
 from models.model.transformer import Transformer
-from util.bleu import idx_to_word, get_bleu
+from util.bleu import get_bleu
 from util.epoch_timer import epoch_time
 
-def count_parameters(model):  # 함수:파라미터 개수
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)  # 반환:학습가능 파라미터 수
+# 하이퍼파라미터 정의
+clip = 1
+init_lr = 1e-3
+weight_decay = 1e-5
+adam_eps = 1e-9
+factor = 0.5
+patience = 5
+warmup = 5
+epoch = 50
+inf = float('inf')
+d_model = 128
+ffn_hidden = 512
+n_heads = 8
+n_layers = 2
+drop_prob = 0.1
+max_len = 100
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+src_pad_idx = src_vocab['<pad>']
+trg_pad_idx = trg_vocab['<pad>']
+trg_sos_idx = trg_vocab['<sos>']
+enc_voc_size = len(src_vocab)
+dec_voc_size = len(trg_vocab)
 
-def initialize_weights(m):  # 함수:가중치 초기화
-    if hasattr(m, 'weight') and m.weight.dim() > 1:  # 조건:weight 속성 및 차원
-        nn.init.kaiming_uniform(m.weight.data)  # 초기화:Kaiming 균등
+# 모델 정의
+model = Transformer(src_pad_idx=src_pad_idx,
+                    trg_pad_idx=trg_pad_idx,
+                    trg_sos_idx=trg_sos_idx,
+                    d_model=d_model,
+                    enc_voc_size=enc_voc_size,
+                    dec_voc_size=dec_voc_size,
+                    max_len=max_len,
+                    ffn_hidden=ffn_hidden,
+                    n_head=n_heads,
+                    n_layers=n_layers,
+                    drop_prob=drop_prob,
+                    device=device).to(device)
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-model = Transformer(src_pad_idx=src_pad_idx,  # 인스턴스:Transformer
-                    trg_pad_idx=trg_pad_idx,  # 파라미터:trg_pad_idx
-                    trg_sos_idx=trg_sos_idx,  # 파라미터:trg_sos_idx
-                    d_model=d_model,  # 차원:d_model
-                    enc_voc_size=enc_voc_size,  # 어휘크기:인코더
-                    dec_voc_size=dec_voc_size,  # 어휘크기:디코더
-                    max_len=max_len,  # 최대길이:max_len
-                    ffn_hidden=ffn_hidden,  # FFN은닉:ffn_hidden
-                    n_head=n_heads,  # 헤드수:n_heads
-                    n_layers=n_layers,  # 레이어수:n_layers
-                    drop_prob=drop_prob,  # 드롭아웃:drop_prob
-                    device=device).to(device)  # 디바이스:device
+print(f'The model has {count_parameters(model):,} trainable parameters')
 
-print(f'The model has {count_parameters(model):,} trainable parameters')  # 출력:파라미터 수
-model.apply(initialize_weights)  # 적용:가중치 초기화
+model.apply(lambda m: nn.init.kaiming_uniform_(m.weight.data) if hasattr(m, 'weight') and m.weight.dim() > 1 else None)
 
-optimizer = Adam(params=model.parameters(),  # 옵티마이저:Adam
-                 lr=init_lr,  # 학습률:init_lr
-                 weight_decay=weight_decay,  # 가중치감쇠:weight_decay
-                 eps=adam_eps)  # epsilon:adam_eps
+optimizer = Adam(params=model.parameters(), lr=init_lr, weight_decay=weight_decay, eps=adam_eps)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, verbose=True, factor=factor, patience=patience)
+criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
 
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer,  # 스케줄러:ReduceLROnPlateau
-                                                 verbose=True,  # 출력:True
-                                                 factor=factor,  # 감소비율:factor
-                                                 patience=patience)  # 대기:patience
+def train(model, iterator, optimizer, criterion, clip):
+    model.train()
+    epoch_loss = 0
+    for i, (src, trg) in enumerate(iterator):
+        src, trg = src.to(device), trg.to(device)
 
-criterion = nn.CrossEntropyLoss(ignore_index=src_pad_idx)  # 손실:CrossEntropy(ignore<pad>)
+        optimizer.zero_grad()
+        output = model(src, trg[:, :-1])
+        output_reshape = output.contiguous().view(-1, output.shape[-1])
+        trg = trg[:, 1:].contiguous().view(-1)
 
+        loss = criterion(output_reshape, trg)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        optimizer.step()
 
-def train(model, iterator, optimizer, criterion, clip):  # 함수:train
-    model.train()  # 모드:train
-    epoch_loss = 0  # 초기화:epoch_loss
-    for i, batch in enumerate(iterator):  # 반복:배치
-        src = batch.src  # 데이터:src
-        trg = batch.trg  # 데이터:trg
+        epoch_loss += loss.item()
+        print('step :', round((i / len(iterator)) * 100, 2), '% , loss :', loss.item())
 
-        optimizer.zero_grad()  # 초기화:grad
-        output = model(src, trg[:, :-1])  # 순전파
-        output_reshape = output.contiguous().view(-1, output.shape[-1])  # 변환:output
-        trg = trg[:, 1:].contiguous().view(-1)  # 변환:trg
+    return epoch_loss / len(iterator)
 
-        loss = criterion(output_reshape, trg)  # 손실 계산
-        loss.backward()  # 역전파
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)  # 클리핑:clip
-        optimizer.step()  # 업데이트
+def evaluate(model, iterator, criterion):
+    model.eval()
+    epoch_loss = 0
+    batch_bleu = []
+    with torch.no_grad():
+        for i, (src, trg) in enumerate(iterator):
+            src, trg = src.to(device), trg.to(device)
+            output = model(src, trg[:, :-1])
+            output_reshape = output.contiguous().view(-1, output.shape[-1])
+            trg_flat = trg[:, 1:].contiguous().view(-1)
 
-        epoch_loss += loss.item()  # 누적:loss
-        print('step :', round((i / len(iterator)) * 100, 2), '% , loss :', loss.item())  # 출력:진행률
+            loss = criterion(output_reshape, trg_flat)
+            epoch_loss += loss.item()
 
-    return epoch_loss / len(iterator)  # 반환:평균 loss
-
-
-def evaluate(model, iterator, criterion):  # 함수:evaluate
-    model.eval()  # 모드:eval
-    epoch_loss = 0  # 초기화:epoch_loss
-    batch_bleu = []  # 초기화:batch_bleu
-    with torch.no_grad():  # no_grad
-        for i, batch in enumerate(iterator):  # 반복:배치
-            src = batch.src  # 데이터:src
-            trg = batch.trg  # 데이터:trg
-            output = model(src, trg[:, :-1])  # 순전파
-            output_reshape = output.contiguous().view(-1, output.shape[-1])  # 변환:output
-            trg = trg[:, 1:].contiguous().view(-1)  # 변환:trg
-
-            loss = criterion(output_reshape, trg)  # 손실 계산
-            epoch_loss += loss.item()  # 누적:loss
-
-            total_bleu = []  # 초기화:total_bleu
-            for j in range(batch_size):  # 반복:batch_size
+            for j in range(src.size(0)):
                 try:
-                    trg_words = idx_to_word(batch.trg[j], loader.target.vocab)  # 변환:ref 문장
-                    output_words = output[j].max(dim=1)[1]  # 예측 인덱스
-                    output_words = idx_to_word(output_words, loader.target.vocab)  # 변환:hyp 문장
-                    bleu = get_bleu(hypotheses=output_words.split(), reference=trg_words.split())  # BLEU 계산
-                    total_bleu.append(bleu)  # 추가:bleu
+                    pred_ids = output[j].argmax(dim=1).tolist()
+                    trg_ids = trg[j][1:].tolist()
+                    
+                    pred_tokens = [k for idx in pred_ids if idx in trg_vocab.values() for k, v in trg_vocab.items() if v == idx]
+                    trg_tokens = [k for idx in trg_ids if idx in trg_vocab.values() for k, v in trg_vocab.items() if v == idx]
+                    
+                    bleu = get_bleu(hypotheses=pred_tokens, reference=trg_tokens)
+                    batch_bleu.append(bleu)
                 except:
-                    pass  # 예외 무시
+                    continue
 
-            total_bleu = sum(total_bleu) / len(total_bleu)  # 평균:batch BLEU
-            batch_bleu.append(total_bleu)  # 추가:batch_bleu
+    avg_bleu = sum(batch_bleu) / len(batch_bleu) if batch_bleu else 0
+    return epoch_loss / len(iterator), avg_bleu
 
-    batch_bleu = sum(batch_bleu) / len(batch_bleu)  # 평균:전체 BLEU
-    return epoch_loss / len(iterator), batch_bleu  # 반환:loss, BLEU
+def run(total_epoch, best_loss):
+    train_losses, test_losses, bleus = [], [], []
+    for step in range(total_epoch):
+        start_time = time.time()
+        train_loss = train(model, train_loader, optimizer, criterion, clip)
+        valid_loss, bleu = evaluate(model, train_loader, criterion)
+        end_time = time.time()
 
+        if step > warmup:
+            scheduler.step(valid_loss)
 
-def run(total_epoch, best_loss):  # 함수:run
-    train_losses, test_losses, bleus = [], [], []  # 초기화:리스트
-    for step in range(total_epoch):  # 반복:에포크
-        start_time = time.time()  # 측정:시작 시간
-        train_loss = train(model, train_iter, optimizer, criterion, clip)  # 학습 호출
-        valid_loss, bleu = evaluate(model, valid_iter, criterion)  # 평가 호출
-        end_time = time.time()  # 측정:종료 시간
+        train_losses.append(train_loss)
+        test_losses.append(valid_loss)
+        bleus.append(bleu)
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
 
-        if step > warmup:  # 조건:워밍업 이후
-            scheduler.step(valid_loss)  # 스케줄:업데이트
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+            torch.save(model.state_dict(), f'saved/model-{valid_loss:.3f}.pt')
 
-        train_losses.append(train_loss)  # 추가:train_losses
-        test_losses.append(valid_loss)  # 추가:test_losses
-        bleus.append(bleu)  # 추가:bleus
-        epoch_mins, epoch_secs = epoch_time(start_time, end_time)  # 시간계산
+        with open('result/train_loss.txt', 'w') as f:
+            f.write(str(train_losses))
+        with open('result/test_loss.txt', 'w') as f:
+            f.write(str(test_losses))
+        with open('result/bleu.txt', 'w') as f:
+            f.write(str(bleus))
 
-        if valid_loss < best_loss:  # 조건:최저 loss
-            best_loss = valid_loss  # 갱신:best_loss
-            torch.save(model.state_dict(), 'saved/model-{0}.pt'.format(valid_loss))  # 저장:모델
-
-        f = open('result/train_loss.txt', 'w')  # 파일열기:train_loss
-        f.write(str(train_losses))  # 기록:train_losses
-        f.close()  # 파일닫기
-
-        f = open('result/bleu.txt', 'w')  # 파일열기:bleu
-        f.write(str(bleus))  # 기록:bleus
-        f.close()  # 파일닫기
-
-        f = open('result/test_loss.txt', 'w')  # 파일열기:test_loss
-        f.write(str(test_losses))  # 기록:test_losses
-        f.close()  # 파일닫기
-
-        print(f'Epoch: {step + 1} | Time: {epoch_mins}m {epoch_secs}s')  # 출력:에포크, 시간
-        print(f'	Train Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')  # 출력:Train PPL
-        print(f'	Val Loss: {valid_loss:.3f} |  Val PPL: {math.exp(valid_loss):7.3f}')  # 출력:Val PPLL
-        print(f'	BLEU Score: {bleu:.3f}')  # 출력:BLEU
+        print(f'Epoch: {step + 1} | Time: {epoch_mins}m {epoch_secs}s')
+        print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
+        print(f'\tVal Loss: {valid_loss:.3f} |  Val PPL: {math.exp(valid_loss):7.3f}')
+        print(f'\tBLEU Score: {bleu:.3f}')
 
 if __name__ == '__main__':
-    run(total_epoch=epoch, best_loss=inf)  # 실행:main
+    run(total_epoch=epoch, best_loss=inf)
+    import pickle
+
+    with open('saved/src_vocab.pkl', 'wb') as f:
+        pickle.dump(src_vocab, f)
+
+    with open('saved/trg_vocab.pkl', 'wb') as f:
+        pickle.dump(trg_vocab, f)
+
+'''
+
+import math
+import time
+
+import torch
+from torch import nn, optim
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+
+from data import train_loader, valid_loader, src_vocab, trg_vocab  # 새 데이터 불러오기 방식 반영
+from util.bleu import get_bleu
+from util.epoch_timer import epoch_time
+
+# 모델 정의 (원하는 트랜스포머 모델로 교체 가능)
+from models.model.transformer import Transformer
+
+# 학습 설정
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+clip = 1
+init_lr = 1e-3
+weight_decay = 1e-5
+adam_eps = 1e-9
+factor = 0.5
+patience = 5
+warmup = 5
+batch_size = 2
+epoch = 10
+inf = float('inf')
+
+# vocab index 지정
+src_pad_idx = src_vocab['<pad>']
+trg_pad_idx = trg_vocab['<pad>']
+trg_sos_idx = trg_vocab['<sos>']
+
+model = Transformer(src_pad_idx=src_pad_idx,
+                    trg_pad_idx=trg_pad_idx,
+                    trg_sos_idx=trg_sos_idx,
+                    d_model=128,
+                    enc_voc_size=len(src_vocab),
+                    dec_voc_size=len(trg_vocab),
+                    max_len=100,
+                    ffn_hidden=512,
+                    n_head=8,
+                    n_layers=2,
+                    drop_prob=0.1,
+                    device=device).to(device)
+
+print(f'The model has {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters')
+
+optimizer = Adam(params=model.parameters(), lr=init_lr, weight_decay=weight_decay, eps=adam_eps)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, verbose=True, factor=factor, patience=patience)
+criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
+
+def train(model, iterator, optimizer, criterion, clip):
+    model.train()
+    epoch_loss = 0
+    for i, (src, trg) in enumerate(iterator):
+        src, trg = src.to(device), trg.to(device)
+
+        optimizer.zero_grad()
+        output = model(src, trg[:, :-1])
+        output = output.contiguous().view(-1, output.shape[-1])
+        trg = trg[:, 1:].contiguous().view(-1)
+
+        loss = criterion(output, trg)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        optimizer.step()
+
+        epoch_loss += loss.item()
+        print('step :', round((i / len(iterator)) * 100, 2), '% , loss :', loss.item())
+
+    return epoch_loss / len(iterator)
+
+def evaluate(model, iterator, criterion):
+    model.eval()
+    epoch_loss = 0
+    batch_bleu = []
+
+    with torch.no_grad():
+        for i, (src, trg) in enumerate(iterator):
+            src, trg = src.to(device), trg.to(device)
+            output = model(src, trg[:, :-1])
+            output_reshape = output.contiguous().view(-1, output.shape[-1])
+            trg_reshape = trg[:, 1:].contiguous().view(-1)
+            loss = criterion(output_reshape, trg_reshape)
+            epoch_loss += loss.item()
+
+            for j in range(src.size(0)):
+                try:
+                    pred_idx = output[j].max(dim=1)[1].tolist()
+                    target_idx = trg[j][1:].tolist()
+
+                    pred_tokens = [k for k, v in trg_vocab.items() if v in pred_idx]
+                    target_tokens = [k for k, v in trg_vocab.items() if v in target_idx]
+
+                    bleu = get_bleu(hypotheses=pred_tokens, reference=target_tokens)
+                    batch_bleu.append(bleu)
+                except:
+                    continue
+
+    return epoch_loss / len(iterator), sum(batch_bleu) / len(batch_bleu) if batch_bleu else 0
+
+def run(total_epoch, best_loss):
+    train_losses, test_losses, bleus = [], [], []
+    for step in range(total_epoch):
+        start_time = time.time()
+        train_loss = train(model, train_loader, optimizer, criterion, clip)
+        valid_loss, bleu = evaluate(model, valid_loader, criterion)
+        end_time = time.time()
+
+        if step > warmup:
+            scheduler.step(valid_loss)
+
+        train_losses.append(train_loss)
+        test_losses.append(valid_loss)
+        bleus.append(bleu)
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+            torch.save(model.state_dict(), f'saved/model-{valid_loss:.3f}.pt')
+
+        with open('result/train_loss.txt', 'w') as f:
+            f.write(str(train_losses))
+        with open('result/test_loss.txt', 'w') as f:
+            f.write(str(test_losses))
+        with open('result/bleu.txt', 'w') as f:
+            f.write(str(bleus))
+
+        print(f'Epoch: {step + 1} | Time: {epoch_mins}m {epoch_secs}s')
+        print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
+        print(f'\tVal Loss: {valid_loss:.3f} |  Val PPL: {math.exp(valid_loss):7.3f}')
+        print(f'\tBLEU Score: {bleu:.3f}')
+
+if __name__ == '__main__':
+    run(total_epoch=epoch, best_loss=inf)
+'''
