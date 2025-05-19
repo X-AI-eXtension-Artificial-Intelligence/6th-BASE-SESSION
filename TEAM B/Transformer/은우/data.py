@@ -1,28 +1,30 @@
-"""
-@author : Hyunwoong
-@when : 2019-10-29
-@homepage : https://github.com/gusdnd852
-"""
-from conf import *
-from util.data_loader import DataLoader
-from util.tokenizer import Tokenizer
+import json
+import os
+from torchtext.datasets import IMDB
+from sklearn.model_selection import train_test_split
 
-tokenizer = Tokenizer()
-loader = DataLoader(ext=('.en', '.de'),
-                    tokenize_en=tokenizer.tokenize_en,
-                    tokenize_de=tokenizer.tokenize_de,
-                    init_token='<sos>',
-                    eos_token='<eos>')
+def save_split_data():
+    # data 폴더 생성
+    os.makedirs("data", exist_ok=True)
 
-train, valid, test = loader.make_dataset()
-loader.build_vocab(train_data=train, min_freq=2)
-train_iter, valid_iter, test_iter = loader.make_iter(train, valid, test,
-                                                     batch_size=batch_size,
-                                                     device=device)
+    train_iter, test_iter = IMDB(split=('train', 'test'))
 
-src_pad_idx = loader.source.vocab.stoi['<pad>']
-trg_pad_idx = loader.target.vocab.stoi['<pad>']
-trg_sos_idx = loader.target.vocab.stoi['<sos>']
+    train_samples = [{"label": label, "text": text} for label, text in train_iter]
+    test_samples = [{"label": label, "text": text} for label, text in test_iter]
 
-enc_voc_size = len(loader.source.vocab)
-dec_voc_size = len(loader.target.vocab)
+    # train에서 valid 20% 분리
+    train_data, valid_data = train_test_split(train_samples, test_size=0.2, random_state=42, stratify=[s["label"] for s in train_samples])
+
+    # 파일 저장 함수
+    def save_jsonl(filename, data):
+        with open(filename, "w", encoding="utf-8") as f:
+            for item in data:
+                json.dump(item, f, ensure_ascii=False)
+                f.write("\n")
+
+    save_jsonl("data/train_data.jsonl", train_data)
+    save_jsonl("data/valid_data.jsonl", valid_data)
+    save_jsonl("data/test_data.jsonl", test_samples)
+
+if __name__ == "__main__":
+    save_split_data()
