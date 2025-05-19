@@ -18,9 +18,9 @@ HfFolder.save_token(hf_token)
 
 # ----- 설정 -----
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 32
-EPOCHS = 10
-MAX_LEN = 128
+BATCH_SIZE = 64
+EPOCHS = 20
+MAX_LEN = 256
 LR = 5e-4
 CHECKPOINT_DIR = "./checkpoints"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -29,25 +29,25 @@ os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
 
 # ----- 데이터셋 로드 -----
-dataset = load_dataset("squarelike/sharegpt_deepl_ko_translation", split="train[:5000]")
+dataset = load_dataset("argilla/news-summary-new", split="train[:100]")
 
 # ----- 토크나이저 및 특수토큰 -----
-tokenizer_en = get_tokenizer("basic_english")
-tokenizer_ko = get_tokenizer("basic_english")
+tokenizer_input = get_tokenizer("basic_english")
+tokenizer_target = get_tokenizer("basic_english")
 SPECIALS = ["<unk>", "<pad>", "<sos>", "<eos>"]
 UNK_IDX, PAD_IDX, SOS_IDX, EOS_IDX = 0, 1, 2, 3
 
 # ----- 단어 사전 -----
-def yield_tokens(data, tokenizer, lang):
+def yield_tokens(data, tokenizer, field):
     for example in data:
-        tokens = tokenizer(example[lang])
+        tokens = tokenizer(example[field])
         yield tokens
 
-vocab_src = build_vocab_from_iterator(yield_tokens(dataset, tokenizer_en, "english"),
+vocab_src = build_vocab_from_iterator(yield_tokens(dataset, tokenizer_input, "text"),
                                       specials=SPECIALS)
 vocab_src.set_default_index(UNK_IDX)
 
-vocab_tgt = build_vocab_from_iterator(yield_tokens(dataset, tokenizer_ko, "korean"),
+vocab_tgt = build_vocab_from_iterator(yield_tokens(dataset, tokenizer_target, "target"),
                                       specials=SPECIALS)
 vocab_tgt.set_default_index(UNK_IDX)
 
@@ -58,8 +58,8 @@ def numericalize(tokens, vocab):
 def collate_fn(batch):
     src_batch, tgt_batch = [], []
     for example in batch:
-        src_tokens = tokenizer_en(example["english"])
-        tgt_tokens = tokenizer_ko(example["korean"])
+        src_tokens = tokenizer_input(example["text"])
+        tgt_tokens = tokenizer_target(example["target"])
         src_tensor = torch.tensor(numericalize(src_tokens, vocab_src), dtype=torch.long)
         tgt_tensor = torch.tensor(numericalize(tgt_tokens, vocab_tgt), dtype=torch.long)
         src_batch.append(src_tensor[:MAX_LEN])
@@ -102,7 +102,6 @@ for epoch in range(EPOCHS):
     torch.save(model.state_dict(), ckpt_path)
 
 # ----- 저장 -----
-# vocab 저장 경로
 with open(os.path.join(CHECKPOINT_DIR, "vocab_src.pkl"), "wb") as f:
     pickle.dump(vocab_src, f)
 
