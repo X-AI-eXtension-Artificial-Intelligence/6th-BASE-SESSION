@@ -13,7 +13,8 @@ VOCAB_TGT_PATH = "./checkpoints/vocab_tgt.pkl"
 SOS_IDX, EOS_IDX, PAD_IDX = 2, 3, 1
 
 # ----- 토크나이저 -----
-tokenizer_en = get_tokenizer("basic_english")
+tokenizer_input = get_tokenizer("basic_english")
+tokenizer_target = get_tokenizer("basic_english")  # 출력 텍스트는 토크나이즈 후 디코딩용
 
 # ----- 사전 로드 -----
 def load_vocab(path):
@@ -27,10 +28,10 @@ vocab_tgt = load_vocab(VOCAB_TGT_PATH)
 def numericalize(tokens, vocab):
     return [SOS_IDX] + [vocab[token] for token in tokens] + [EOS_IDX]
 
-# ----- 번역 함수 (Greedy Decode) -----
-def translate_sentence(sentence, model):
+# ----- 요약 함수 (Greedy Decode) -----
+def summarize_text(text, model):
     model.eval()
-    tokens = tokenizer_en(sentence)
+    tokens = tokenizer_input(text)
     src_tensor = torch.tensor(numericalize(tokens, vocab_src), dtype=torch.long).unsqueeze(0).to(DEVICE)
     
     ys = torch.tensor([[SOS_IDX]], dtype=torch.long).to(DEVICE)
@@ -55,8 +56,9 @@ model.eval()
 # ----- 실행 -----
 if __name__ == "__main__":
     while True:
-        sentence = input("Enter English sentence (or 'exit'): ")
-        if sentence.strip().lower() == "exit":
+        text = input("📰 Enter news article (or 'exit'): ")
+        if text.strip().lower() == "exit":
             break
-        result = translate_sentence(sentence, model)
-        print("🟢 Translation:", result)
+        result = summarize_text(text, model)
+        print("🟢 Summary:", result)
+        
