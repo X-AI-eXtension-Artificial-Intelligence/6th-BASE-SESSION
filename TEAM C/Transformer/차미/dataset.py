@@ -1,79 +1,73 @@
-import spacy
 import torch
-from torchtext.legacy.data import Field, BucketIterator
-from torchtext.legacy.datasets import Multi30k
+import torch.nn as nn
+from torch.utils.data import Dataset
 
-'''
-토큰화
-'''
+# 디코더 입력에서 미래 토큰을 가리지 않도록 마스크 생성
+def causal_mask(size):
+    mask = torch.triu(torch.ones((1, size, size)), diagonal=1).type(torch.int)
+    return mask == 0
 
-def load_tokenizers():
-    """Load Spacy tokenizers for English and German."""
-    try:
-        spacy_en = spacy.load('en_core_web_sm')  # 영어 토크나이저
-        spacy_de = spacy.load('de_core_news_sm')  # 독일어 토크나이저
-    except OSError:
-        raise RuntimeError(
-            "Spacy 모델이 설치되지 않았습니다. 다음 명령어를 실행하세요:\n"
-            "!python -m spacy download en_core_web_sm\n"
-            "!python -m spacy download de_core_news_sm"
-        )
-    return spacy_en, spacy_de
+# 번역 데이터셋을 다루는 커스텀 Dataset 클래스
+class BilingualDataset(Dataset):
+    def __init__(self, ds, tokenizer_src, tokenizer_tgt, src_lang, tgt_lang, seq_len):
+        super().__init__()
+        self.ds = ds # 원본 데이터셋
+        self.tokenizer_src = tokenizer_src # 소스 언어 토크나이저
+        self.tokenizer_tgt = tokenizer_tgt # 타겟 언어 토크나이저
+        self.src_lang = src_lang # 소스 언어 코드
+        self.tgt_lang = tgt_lang # 타겟 언어 코드
+        self.seq_len = seq_len # 시퀀스 최대 길이
 
-# 독일어(Deutsch) 문장을 토큰화 하는 함수 (순서를 뒤집지 않음)
-def tokenize_de(text):
-    return [token.text for token in spacy_de.tokenizer(text)]
+        self.sos_token = torch.tensor([tokenizer_tgt.token_to_id("[SOS]")], dtype=torch.int64)
+        self.eos_token = torch.tensor([tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64)
+        self.pad_token = torch.tensor([tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64)
 
-# 영어(English) 문장을 토큰화 하는 함수
-def tokenize_en(text):
-    return [token.text for token in spacy_en.tokenizer(text)]
+    def __len__(self):
+        return len(self.ds)
 
+    def __getitem__(self, idx):
+        sample = self.ds[idx]
+        src_text = sample['translation'][self.src_lang]
+        tgt_text = sample['translation'][self.tgt_lang]
 
-'''
-- 필드(field) 라이브러리 이용해 데이터셋에 대한 구체적인 전처리 내용 명시
-- Seq2Seq 모델과 다르게 batch_first 속성의 값을 True로 설정
-- 소스(SRC): 독일어 -> 목표(TRG): 영어
-'''
+        src_tokens = self.tokenizer_src.encode(src_text).ids
+        tgt_tokens = self.tokenizer_tgt.encode(tgt_text).ids
 
-def load_dataset(batch_size=128, device=None):
-    """Load Multi30k dataset with tokenized fields and iterators."""
-    global spacy_en, spacy_de
-    spacy_en, spacy_de = load_tokenizers()
+        src_pad_len = self.seq_len - len(src_tokens) - 2 # sos와 eos를 추가할 공간 고려
+        tgt_pad_len = self.seq_len - len(tgt_tokens) - 1 # sos만 추가하고 eos는 라벨에만 포함
 
-    SRC = Field(tokenize=tokenize_de, init_token="<sos>", eos_token="<eos>", lower=True, batch_first=True)
-    TRG = Field(tokenize=tokenize_en, init_token="<sos>", eos_token="<eos>", lower=True, batch_first=True)
+        if src_pad_len < 0 or tgt_pad_len < 0:
+            raise ValueError("문장 길이가 시퀀스 길이를 초과")
 
-    # 데이터셋 로드
-    ## Multi30k: 대표적인 영어-독어 번역 데이터셋
-    train_dataset, valid_dataset, test_dataset = Multi30k.splits(exts=(".de", ".en"), fields=(SRC, TRG))
+        encoder_input = torch.cat([
+            self.sos_token,
+            torch.tensor(src_tokens, dtype=torch.int64),
+            self.eos_token,
+            torch.tensor([self.pad_token] * src_pad_len, dtype=torch.int64)
+        ], dim=0)
 
-    print(f"학습 데이터셋 크기: {len(train_dataset.examples)}개")
-    print(f"검증 데이터셋 크기: {len(valid_dataset.examples)}개")
-    print(f"테스트 데이터셋 크기: {len(test_dataset.examples)}개")
+        decoder_input = torch.cat([
+            self.sos_token,
+            torch.tensor(tgt_tokens, dtype=torch.int64),
+            torch.tensor([self.pad_token] * tgt_pad_len, dtype=torch.int64)
+        ], dim=0)
 
-    # 어휘 사전 생성
-    ## 필드(field) 객체의 build_vocab 메서드를 이용해 영어와 독어 단어 사전 생성
-    ## -> 최소 2번 이상 등장한 단어만을 선택
-    SRC.build_vocab(train_dataset, min_freq=2)
-    TRG.build_vocab(train_dataset, min_freq=2)
+        label = torch.cat([
+            torch.tensor(tgt_tokens, dtype=torch.int64),
+            self.eos_token,
+            torch.tensor([self.pad_token] * tgt_pad_len, dtype=torch.int64)
+        ], dim=0)
 
-    # 배치 로더 생성
-    ## 한 문장에 포함된 단어가 순서대로 나열된 상태로 네트워크에 입력되어야 함
-    ## -> 때문에 하나의 배치에 포함된 문장들의 단어의 수가 유사하도록 만들면 좋음
-    ## -> BucketIterator 사용 (배치 크기(batch size): 128)
-    train_iterator, valid_iterator, test_iterator = BucketIterator.splits(
-        (train_dataset, valid_dataset, test_dataset),
-        batch_size=batch_size,
-        device=device
-    )
+        assert encoder_input.size(0) == self.seq_len
+        assert decoder_input.size(0) == self.seq_len
+        assert label.size(0) == self.seq_len
 
-    return SRC, TRG, train_iterator, valid_iterator, test_iterator
-
-def get_device():
-    """Return available device (cuda or cpu)."""
-    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-if __name__ == "__main__":
-    device = get_device()
-    SRC, TRG, train_iterator, valid_iterator, test_iterator = load_dataset(device=device)
-    print(f"사용할 디바이스: {device}")
+        return {
+            "encoder_input": encoder_input, # (seq_len)
+            "decoder_input": decoder_input, # (seq_len)
+            "encoder_mask": (encoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int(), # (1, 1, seq_len)
+            "decoder_mask": (decoder_input != self.pad_token).unsqueeze(0).int() & causal_mask(self.seq_len), # (1, seq_len) & (1, seq_len, seq_len)
+            "label": label, # (seq_len)
+            "src_text": src_text,
+            "tgt_text": tgt_text
+        }

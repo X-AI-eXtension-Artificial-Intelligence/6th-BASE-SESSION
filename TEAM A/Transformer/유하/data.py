@@ -1,7 +1,7 @@
 # data.py : 데이터셋 로딩, 토크나이저 설정, 데이터셋 분할, vocabulary 생성, DataLoader 생성 등의 데이터 전처리 전반
-
+'''
 from conf import *
-from util.data_loader import DataLoader
+from util.data_loader import load_data
 from util.tokenizer import Tokenizer
 
 tokenizer = Tokenizer()
@@ -23,3 +23,19 @@ trg_sos_idx = loader.target.vocab.stoi['<sos>'] # 출력 언어 단어장에서 
 
 enc_voc_size = len(loader.source.vocab) # 입력 언어 단어장의 전체 토큰 개수 저장
 dec_voc_size = len(loader.target.vocab) # 출력 언어 단어장의 전체 토큰 개수 저장
+'''
+
+from conf import *
+from util.data_loader import load_data  # 🔁 함수 기반으로 구조 단순화
+
+# 전체 데이터셋과 단어장 로딩
+train_iter, valid_iter, test_iter, SRC, TRG = load_data(batch_size=batch_size, device=device)
+
+# 특수 토큰 인덱스 추출
+src_pad_idx = SRC.vocab.stoi['<pad>']
+trg_pad_idx = TRG.vocab.stoi['<pad>']
+trg_sos_idx = TRG.vocab.stoi['<sos>']
+
+# vocab 사이즈 추출
+enc_voc_size = len(SRC.vocab)
+dec_voc_size = len(TRG.vocab)

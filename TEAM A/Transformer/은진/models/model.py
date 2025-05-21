@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from blocks import DecoderLayer, EncoderLayer
-from embedding import TransformerEmbedding
+from models.blocks import DecoderLayer, EncoderLayer
+from models.embedding import TransformerEmbedding
 
 # decoder
 # 입력 시퀀스를 받아 여러 디코더 레이어를 통과시켜 최종적으로 단어 분포를 출력
@@ -11,10 +11,10 @@ class Decoder(nn.Module):
         super().__init__()
         
         # 1. 임베딩 레이어 (토큰 임베딩 + 포지셔널 인코딩)
-        self.emb = TransformerEmbedding(d_model=d_model,
-                                        drop_prob=drop_prob,
+        self.emb = TransformerEmbedding(vocab_size=dec_voc_size,
+                                        d_model=d_model,
                                         max_len=max_len,
-                                        vocab_size=dec_voc_size,
+                                        drop_prob=drop_prob,
                                         device=device)
 
         # 2. 디코더 레이어 여러 개 쌓기
@@ -52,11 +52,12 @@ class Encoder(nn.Module):
         super().__init__()
 
         # 1. 임베딩 레이어 (토큰 임베딩 + 포지셔널 인코딩)
-        self.emb = TransformerEmbedding(d_model=d_model,
+        self.emb = TransformerEmbedding(vocab_size=enc_voc_size,
+                                        d_model=d_model,
                                         max_len=max_len,
-                                        vocab_size=enc_voc_size,
                                         drop_prob=drop_prob,
                                         device=device)
+
 
         # 2. 인코더 레이어 여러 개 쌓기
         self.layers = nn.ModuleList([EncoderLayer(d_model=d_model,
@@ -140,7 +141,7 @@ class Transformer(nn.Module):
         trg_pad_mask = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
         # 2. 미래 정보 마스킹: (trg_seq_len, trg_seq_len) 하삼각 행렬
         trg_len = trg.shape[1]
-        trg_sub_mask = torch.tril(torch.ones(trg_len, trg_len)).type(torch.ByteTensor).to(self.device)
+        trg_sub_mask = torch.tril(torch.ones(trg_len, trg_len, device=self.device)).bool()
         # 3. 두 마스크를 AND 연산으로 결합
         trg_mask = trg_pad_mask & trg_sub_mask
         return trg_mask

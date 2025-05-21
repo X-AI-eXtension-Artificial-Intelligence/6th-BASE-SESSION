@@ -53,13 +53,12 @@ def train(model, iterator, optimizer, criterion, clip):
     model.train()
     epoch_loss = 0
     for i, batch in enumerate(iterator):
-        src = batch.src
-        trg = batch.trg
+        src, trg = batch
 
         optimizer.zero_grad()
         output = model(src, trg[:, :-1])
         output_reshape = output.contiguous().view(-1, output.shape[-1])
-        trg = trg[:, 1:].contiguous().view(-1)
+        trg = trg[:, 1:].contiguous().view(-1).to(device)
 
         loss = criterion(output_reshape, trg)
         loss.backward()
@@ -78,11 +77,11 @@ def evaluate(model, iterator, criterion):
     batch_bleu = []
     with torch.no_grad():
         for i, batch in enumerate(iterator):
-            src = batch.src
-            trg = batch.trg
+            src, trg = batch
+
             output = model(src, trg[:, :-1])
             output_reshape = output.contiguous().view(-1, output.shape[-1])
-            trg = trg[:, 1:].contiguous().view(-1)
+            trg = trg[:, 1:].contiguous().view(-1).to(device)
 
             loss = criterion(output_reshape, trg)
             epoch_loss += loss.item()
@@ -98,15 +97,25 @@ def evaluate(model, iterator, criterion):
                 except:
                     pass
 
-            total_bleu = sum(total_bleu) / len(total_bleu)
-            batch_bleu.append(total_bleu)
+            if len(total_bleu) > 0:
+                total_bleu = sum(total_bleu) / len(total_bleu)
+                batch_bleu.append(total_bleu)
+            else:
+                batch_bleu.append(0.0)  # BLEU 점수를 0으로 처리하거나 다른 기본값 사용
 
     batch_bleu = sum(batch_bleu) / len(batch_bleu)
     return epoch_loss / len(iterator), batch_bleu
 
 
+import os
+
 def run(total_epoch, best_loss):
     train_losses, test_losses, bleus = [], [], []
+
+    # 저장 폴더 미리 생성
+    os.makedirs('saved', exist_ok=True)
+    os.makedirs('result', exist_ok=True)
+
     for step in range(total_epoch):
         start_time = time.time()
         train_loss = train(model, train_iter, optimizer, criterion, clip)
@@ -123,24 +132,21 @@ def run(total_epoch, best_loss):
 
         if valid_loss < best_loss:
             best_loss = valid_loss
-            torch.save(model.state_dict(), 'saved/model-{0}.pt'.format(valid_loss))
+            torch.save(model.state_dict(), f'saved/model-{valid_loss:.3f}.pt')
 
-        f = open('result/train_loss.txt', 'w')
-        f.write(str(train_losses))
-        f.close()
-
-        f = open('result/bleu.txt', 'w')
-        f.write(str(bleus))
-        f.close()
-
-        f = open('result/test_loss.txt', 'w')
-        f.write(str(test_losses))
-        f.close()
+        # 파일 저장은 with 문으로 안정적으로
+        with open('result/train_loss.txt', 'w') as f:
+            f.write(str(train_losses))
+        with open('result/bleu.txt', 'w') as f:
+            f.write(str(bleus))
+        with open('result/test_loss.txt', 'w') as f:
+            f.write(str(test_losses))
 
         print(f'Epoch: {step + 1} | Time: {epoch_mins}m {epoch_secs}s')
         print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
         print(f'\tVal Loss: {valid_loss:.3f} |  Val PPL: {math.exp(valid_loss):7.3f}')
         print(f'\tBLEU Score: {bleu:.3f}')
+
 
 
 if __name__ == '__main__':

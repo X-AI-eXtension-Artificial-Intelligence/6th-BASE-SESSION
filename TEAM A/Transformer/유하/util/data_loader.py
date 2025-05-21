@@ -1,7 +1,8 @@
-from torchtext.legacy.data import Field, BucketIterator
-from torchtext.legacy.datasets.translation import Multi30k
+# 호환 안 되어서 수정함 !
+from torchtext.data import Field, BucketIterator, TabularDataset
+import spacy
 
-
+'''
 class DataLoader:
     source: Field = None
     target: Field = None
@@ -40,3 +41,44 @@ class DataLoader:
                                                                               device=device)
         print('dataset initializing done')
         return train_iterator, valid_iterator, test_iterator
+'''
+
+from torchtext.data import Field, BucketIterator, TabularDataset
+import spacy
+
+spacy_eng = spacy.load('en_core_web_sm')
+spacy_fr = spacy.load('fr_core_news_sm')
+
+def tokenize_en(text):
+    return [tok.text for tok in spacy_eng.tokenizer(text)]
+
+def tokenize_fr(text):
+    return [tok.text for tok in spacy_fr.tokenizer(text)]
+
+SRC = Field(tokenize=tokenize_en, init_token='<sos>', eos_token='<eos>', lower=True)
+TRG = Field(tokenize=tokenize_fr, init_token='<sos>', eos_token='<eos>', lower=True)
+
+def load_data(batch_size=128, device='cpu'):
+    fields = {'src': ('src', SRC), 'trg': ('trg', TRG)}
+
+    train_data, valid_data, test_data = TabularDataset.splits(
+        path='data',
+        train='train.tsv',
+        validation='valid.tsv',
+        test='test.tsv',
+        format='tsv',
+        fields=[('src', SRC), ('trg', TRG)]
+    )
+
+    SRC.build_vocab(train_data, min_freq=2)
+    TRG.build_vocab(train_data, min_freq=2)
+
+    train_iterator, valid_iterator, test_iterator = BucketIterator.splits(
+        (train_data, valid_data, test_data),
+        batch_size=batch_size,
+        device=device,
+        sort_within_batch=True,
+        sort_key=lambda x: len(x.src)
+    )
+
+    return train_iterator, valid_iterator, test_iterator, SRC, TRG

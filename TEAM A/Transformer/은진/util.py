@@ -1,15 +1,15 @@
 import math
 from collections import Counter
-from torchtext.legacy.data import Field, BucketIterator
-from torchtext.legacy.datasets.translation import Multi30k
-import spacy
 import numpy as np
+import spacy
+import torch
+from torch.nn.utils.rnn import pad_sequence
+from torchtext.vocab import build_vocab_from_iterator
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
-# bleu
-# bleu 점수 계산용 함수
+# 1. BLEU 점수 계산 함수
 
 def bleu_stats(hypothesis, reference):
-    # 번역 결과와 정답 문장 쌍에 대해 BLEU 점수 계산에 필요한 통계(길이, n-gram 매칭 수 등)를 구함
     stats = []
     stats.append(len(hypothesis))
     stats.append(len(reference))
@@ -20,14 +20,11 @@ def bleu_stats(hypothesis, reference):
         r_ngrams = Counter(
             [tuple(reference[i:i + n]) for i in range(len(reference) + 1 - n)]
         )
-
         stats.append(max([sum((s_ngrams & r_ngrams).values()), 0]))
         stats.append(max([len(hypothesis) + 1 - n, 0]))
     return stats
 
-
 def bleu(stats):
-    # 실제 BLEU 점수(0~1)를 계산.
     if len(list(filter(lambda x: x == 0, stats))) > 0:
         return 0
     (c, r) = stats[:2]
@@ -36,74 +33,32 @@ def bleu(stats):
     ) / 4.
     return math.exp(min([0, 1 - float(r) / c]) + log_bleu_prec)
 
-
-def get_bleu(hypotheses, reference):
-    # 여러 쌍의 번역 결과와 정답에 대해 전체 BLEU 점수를 계산
-    stats = np.array([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
-    for hyp, ref in zip(hypotheses, reference):
+def get_bleu(hypotheses, references):
+    stats = np.array([0.] * 10)
+    for hyp, ref in zip(hypotheses, references):
         stats += np.array(bleu_stats(hyp, ref))
     return 100 * bleu(stats)
 
+def get_bleu_nltk(hypotheses, references):
+    chencherry = SmoothingFunction()
+    scores = []
+    for hyp, ref in zip(hypotheses, references):
+        # reference는 list of list로 넘겨야 함
+        scores.append(sentence_bleu([ref], hyp, smoothing_function=chencherry.method4))
+    return 100 * sum(scores) / len(scores)
+
+# 2. 인덱스 → 단어 변환 함수
 
 def idx_to_word(x, vocab):
-    # 인덱스(숫자)로 이루어진 시퀀스를 실제 단어 시퀀스로 변환
+    # vocab: torchtext.vocab.Vocab 객체
     words = []
     for i in x:
-        word = vocab.itos[i]
+        word = vocab.lookup_token(i)
         if '<' not in word:
             words.append(word)
-    words = " ".join(words)
-    return words
+    return " ".join(words)
 
-# data_loader
-
-class DataLoader:
-    # 번역 데이터셋(Multi30k) 준비
-    # 토크나이저 세팅
-    # 데이터셋 분할
-    # 단어장(vocab) 생성
-    # 배치 이터레이터 생성
-
-    source: Field = None
-    target: Field = None
-
-    def __init__(self, ext, tokenize_en, tokenize_de, init_token, eos_token):
-        self.ext = ext
-        self.tokenize_en = tokenize_en
-        self.tokenize_de = tokenize_de
-        self.init_token = init_token
-        self.eos_token = eos_token
-        print('dataset initializing start')
-
-    def make_dataset(self):
-        if self.ext == ('.de', '.en'):
-            self.source = Field(tokenize=self.tokenize_de, init_token=self.init_token, eos_token=self.eos_token,
-                                lower=True, batch_first=True)
-            self.target = Field(tokenize=self.tokenize_en, init_token=self.init_token, eos_token=self.eos_token,
-                                lower=True, batch_first=True)
-
-        elif self.ext == ('.en', '.de'):
-            self.source = Field(tokenize=self.tokenize_en, init_token=self.init_token, eos_token=self.eos_token,
-                                lower=True, batch_first=True)
-            self.target = Field(tokenize=self.tokenize_de, init_token=self.init_token, eos_token=self.eos_token,
-                                lower=True, batch_first=True)
-
-        train_data, valid_data, test_data = Multi30k.splits(exts=self.ext, fields=(self.source, self.target))
-        return train_data, valid_data, test_data
-
-    def build_vocab(self, train_data, min_freq):
-        self.source.build_vocab(train_data, min_freq=min_freq)
-        self.target.build_vocab(train_data, min_freq=min_freq)
-
-    def make_iter(self, train, validate, test, batch_size, device):
-        train_iterator, valid_iterator, test_iterator = BucketIterator.splits((train, validate, test),
-                                                                              batch_size=batch_size,
-                                                                              device=device)
-        print('dataset initializing done')
-        return train_iterator, valid_iterator, test_iterator
-
-# epoch_timer
-# 에폭 시간 측정
+# 3. epoch 시간 측정 함수
 
 def epoch_time(start_time, end_time):
     elapsed_time = end_time - start_time
@@ -111,22 +66,56 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-# tokenizer
-# 영어/독일어 문장을 토큰(단어) 리스트로 분리
-class Tokenizer:
+# 4. 토크나이저 함수 (spacy 기반)
 
-    def __init__(self):
-        self.spacy_de = spacy.load('de_core_news_sm')
-        self.spacy_en = spacy.load('en_core_web_sm')
+def get_tokenizers():
+    spacy_de = spacy.load('de_core_news_sm')
+    spacy_en = spacy.load('en_core_web_sm')
 
-    def tokenize_de(self, text):
-        """
-        Tokenizes German text from a string into a list of strings
-        """
-        return [tok.text for tok in self.spacy_de.tokenizer(text)]
+    def tokenize_de(text):
+        return [tok.text.lower() for tok in spacy_de.tokenizer(text)]
 
-    def tokenize_en(self, text):
-        """
-        Tokenizes English text from a string into a list of strings
-        """
-        return [tok.text for tok in self.spacy_en.tokenizer(text)]
+    def tokenize_en(text):
+        return [tok.text.lower() for tok in spacy_en.tokenizer(text)]
+
+    return tokenize_de, tokenize_en
+
+# 5. vocab 생성 함수
+
+def build_vocabs(train_iter, tokenize_de, tokenize_en, specials=['<unk>', '<pad>', '<sos>', '<eos>']):
+    def yield_tokens(data_iter, tokenizer, idx):
+        for pair in data_iter:
+            yield tokenizer(pair[idx])
+    vocab_de = build_vocab_from_iterator(
+        yield_tokens(train_iter, tokenize_de, 0),
+        specials=specials,
+        special_first=True
+    )
+    vocab_en = build_vocab_from_iterator(
+        yield_tokens(train_iter, tokenize_en, 1),
+        specials=specials,
+        special_first=True
+    )
+    vocab_de.set_default_index(vocab_de['<unk>'])
+    vocab_en.set_default_index(vocab_en['<unk>'])
+    return vocab_de, vocab_en
+
+# 6. 텍스트 → 인덱스 변환 함수
+
+def get_text_transform(vocab, tokenizer):
+    def text_transform(text):
+        return [vocab['<sos>']] + [vocab[token] for token in tokenizer(text)] + [vocab['<eos>']]
+    return text_transform
+
+# 7. collate_fn (DataLoader용 배치 패딩 함수)
+
+def get_collate_fn(text_transform_src, text_transform_tgt, pad_idx_src, pad_idx_tgt):
+    def collate_fn(batch):
+        src_batch, tgt_batch = [], []
+        for src_sample, tgt_sample in batch:
+            src_batch.append(torch.tensor(text_transform_src(src_sample), dtype=torch.long))
+            tgt_batch.append(torch.tensor(text_transform_tgt(tgt_sample), dtype=torch.long))
+        src_batch = pad_sequence(src_batch, batch_first=True, padding_value=pad_idx_src)
+        tgt_batch = pad_sequence(tgt_batch, batch_first=True, padding_value=pad_idx_tgt)
+        return src_batch, tgt_batch
+    return collate_fn

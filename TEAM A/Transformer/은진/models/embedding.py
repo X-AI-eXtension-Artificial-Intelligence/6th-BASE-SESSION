@@ -38,11 +38,9 @@ class PositionalEncoding(nn.Module):
         # x: 입력 텐서 (batch_size, seq_len)
         # return: 포지셔널 인코딩 (seq_len, d_model)
 
-        batch_size, seq_len = x.size()
         # [batch_size = 128, seq_len = 30]
         # 입력 시퀀스 길이에 맞는 포지셔널 인코딩 슬라이스 반환
-
-        return self.encoding[:seq_len, :]
+        return self.encoding[:x.size(1), :]
         # [seq_len = 30, d_model = 512]
         # 이것이 tok_emb와 더해짐 -> [128, 30, 512]
         # (seq_len, d_model) 크기 반환 -> 이후 브로드캐스팅으로 배치에 더해짐

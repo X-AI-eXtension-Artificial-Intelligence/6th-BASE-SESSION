@@ -1,110 +1,98 @@
-"""
-@author : Hyunwoong
-@when : 2019-10-29
-@homepage : https://github.com/gusdnd852
-"""
+from datasets import load_dataset
+from torch.utils.data import Dataset, DataLoader
+from collections import Counter
+import re
+import torch
 
-from torchtext.legacy.data import Field, BucketIterator
-from torchtext.legacy.datasets.translation import Multi30k
-
-
-class DataLoader:
+class DataLoaderWrapper:
     """
-    모델 학습 위한 데이터셋 로더 클래스
-
-    기능:
-    - Multi30k 번역 데이터셋 로드
-    - source/target 언어 Field 정의 (토큰화 및 토큰 설정 포함)
-    - Vocab 생성
-    - BucketIterator로 미니배치 생성
+    CNN/DailyMail 요약 데이터셋을 불러오고,
+    vocab 생성 및 DataLoader를 만드는 클래스
     """
 
-    # Field 객체는 외부에서도 접근할 수 있도록 클래스 속성으로 선언
-    source: Field = None
-    target: Field = None
+    def __init__(self, max_len=128, vocab_size=30000, min_freq=2):
+        self.max_len = max_len
+        self.vocab_size = vocab_size
+        self.min_freq = min_freq
+        self.token2id = None
+        self.id2token = None
 
-    def __init__(self, ext, tokenize_en, tokenize_de, init_token, eos_token):
+    def build_vocab(self, texts):
         """
-        ext: 번역 언어쌍의 파일 확장자 튜플 (예: ('.de', '.en'))
-        tokenize_en: 영어 토큰화 함수
-        tokenize_de: 독일어 토큰화 함수
-        init_token: 문장 시작 토큰 (<sos>)
-        eos_token: 문장 끝 토큰 (<eos>)
+        전체 문장 기반으로 vocab 생성 (단어 -> 숫자)
         """
-        self.ext = ext
-        self.tokenize_en = tokenize_en
-        self.tokenize_de = tokenize_de
-        self.init_token = init_token
-        self.eos_token = eos_token
+        counter = Counter()
+        for text in texts:
+            tokens = self.tokenize(text)
+            counter.update(tokens)
 
-        print('dataset initializing start')
+        vocab = ['<pad>', '<sos>', '<eos>', '<unk>']
+        vocab += [tok for tok, freq in counter.items() if freq >= self.min_freq]
+        vocab = vocab[:self.vocab_size]
 
-    def make_dataset(self):
-        """
-        Field 객체 정의 및 Multi30k 데이터셋 로드
+        self.token2id = {tok: i for i, tok in enumerate(vocab)}
+        self.id2token = {i: tok for tok, i in self.token2id.items()}
 
-        반환: train_data, valid_data, test_data (torchtext Dataset 객체)
-        """
+    def tokenize(self, text):
+        # 간단한 토크나이저: 단어 및 특수문자 단위로 나눔
+        return re.findall(r"\w+|\S", text.lower())
 
-        # 독일어 -> 영어 번역 설정일 경우
-        if self.ext == ('.de', '.en'):
-            self.source = Field(tokenize=self.tokenize_de,
-                                init_token=self.init_token,
-                                eos_token=self.eos_token,
-                                lower=True,               # 모두 소문자로 변환
-                                batch_first=True)         # shape: [batch, seq_len]
+    def preprocess(self, src, tgt):
+        src_tokens = self.tokenize(src)
+        tgt_tokens = self.tokenize(tgt)
 
-            self.target = Field(tokenize=self.tokenize_en,
-                                init_token=self.init_token,
-                                eos_token=self.eos_token,
-                                lower=True,
-                                batch_first=True)
+        src_ids = [self.token2id.get(tok, self.token2id['<unk>']) for tok in src_tokens]
+        tgt_ids = [self.token2id.get(tok, self.token2id['<unk>']) for tok in tgt_tokens]
 
-        # 영어 -> 독일어 번역 설정일 경우
-        elif self.ext == ('.en', '.de'):
-            self.source = Field(tokenize=self.tokenize_en,
-                                init_token=self.init_token,
-                                eos_token=self.eos_token,
-                                lower=True,
-                                batch_first=True)
+        # decoder_input: <sos> + truncated target
+        decoder_input = [self.token2id['<sos>']] + tgt_ids
+        label = tgt_ids + [self.token2id['<eos>']]
 
-            self.target = Field(tokenize=self.tokenize_de,
-                                init_token=self.init_token,
-                                eos_token=self.eos_token,
-                                lower=True,
-                                batch_first=True)
+        # 길이 잘라주기 (max_len 기준)
+        decoder_input = decoder_input[:self.max_len]
+        label = label[:self.max_len]
+        src_ids = src_ids[:self.max_len]
 
-        # Multi30k 데이터셋에서 train/val/test 분리
-        train_data, valid_data, test_data = Multi30k.splits(
-            exts=self.ext,
-            fields=(self.source, self.target)
-        )
+        # 패딩
+        pad = self.token2id['<pad>']
+        src_ids += [pad] * (self.max_len - len(src_ids))
+        decoder_input += [pad] * (self.max_len - len(decoder_input))
+        label += [pad] * (self.max_len - len(label))
 
-        return train_data, valid_data, test_data
+        return {
+            "input_ids": torch.tensor(src_ids),
+            "decoder_input_ids": torch.tensor(decoder_input),
+            "labels": torch.tensor(label),
+        }
 
-    def build_vocab(self, train_data, min_freq):
-        """
-        Field 객체 기준으로 단어 사전(vocab) 생성
 
-        train_data: 학습 데이터셋
-        min_freq: 단어가 최소 몇 번 등장해야 vocab에 포함될지
-        """
-        self.source.build_vocab(train_data, min_freq=min_freq)
-        self.target.build_vocab(train_data, min_freq=min_freq)
+    def make_dataset(self, split='train'):
+        data = load_dataset("cnn_dailymail", "3.0.0")[split]
+        src_list = [item['article'] for item in data]
+        tgt_list = [item['highlights'] for item in data]
 
-    def make_iter(self, train, validate, test, batch_size, device):
-        """
-        BucketIterator를 생성하여 데이터를 미니배치로 나누는 함수
+        if self.token2id is None:
+            self.build_vocab(src_list + tgt_list)
 
-        train, validate, test: 데이터셋 객체들
+        dataset = SummaryDataset(src_list, tgt_list, self)
+        return dataset
 
-        반환: train_iterator, valid_iterator, test_iterator
-        """
-        train_iterator, valid_iterator, test_iterator = BucketIterator.splits(
-            (train, validate, test),
-            batch_size=batch_size,
-            device=device
-        )
+    def make_iter(self, dataset, batch_size, shuffle=True):
+        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
-        print('dataset initializing done')
-        return train_iterator, valid_iterator, test_iterator
+
+class SummaryDataset(Dataset):
+    """
+    HuggingFace CNN/DailyMail용 Dataset 클래스
+    """
+
+    def __init__(self, src_list, tgt_list, loader):
+        self.src_list = src_list
+        self.tgt_list = tgt_list
+        self.loader = loader
+
+    def __len__(self):
+        return len(self.src_list)
+
+    def __getitem__(self, idx):
+        return self.loader.preprocess(self.src_list[idx], self.tgt_list[idx])

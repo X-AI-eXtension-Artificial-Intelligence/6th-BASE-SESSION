@@ -15,14 +15,15 @@ loader = DataLoader(ext=('en', 'de'),
                     eos_token='<eos>')
 
 train, valid, test = loader.make_dataset()
-loader.build_vocab(train_data=train, min_freq=2)
+loader.build_vocab(train_data=train)
 train_iter, valid_iter, test_iter = loader.make_iter(train, valid, test,
                                                      batch_size=batch_size,
                                                      device=device)
 
-src_pad_idx = loader.source.vocab.stoi['<pad>']
-trg_pad_idx = loader.target.vocab.stoi['<pad>']
-trg_sos_idx = loader.target.vocab.stoi['<sos>']
+src_pad_idx = loader.vocab_src['<pad>']
+trg_pad_idx = loader.vocab_trg['<pad>']
+trg_sos_idx = loader.vocab_trg['<sos>']
+
 
 enc_voc_size = len(loader.source.vocab)
 dec_voc_size = len(loader.target.vocab)
