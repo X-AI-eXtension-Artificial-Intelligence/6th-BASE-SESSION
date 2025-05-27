@@ -61,7 +61,10 @@ model.apply(lambda m: nn.init.kaiming_uniform_(m.weight.data) if hasattr(m, 'wei
 
 optimizer = Adam(params=model.parameters(), lr=init_lr, weight_decay=weight_decay, eps=adam_eps)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, verbose=True, factor=factor, patience=patience)
-criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
+#criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx)  # 기존 BLEU: 46.826
+#라벨 스무딩 기법(정답이 아닌 클래스를 0으로 예측하지 않고 정답을 0.9 정도로 예측)을 활용 BLEU:47.727 
+criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx, label_smoothing=0.1) 
+
 
 def train(model, iterator, optimizer, criterion, clip):
     model.train()
