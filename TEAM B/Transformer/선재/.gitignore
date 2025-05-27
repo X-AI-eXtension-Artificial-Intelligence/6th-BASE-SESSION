@@ -1,3 +1,0 @@
-echo ".env" >> .gitignore
-echo "env" >> .gitignore
-echo ".ipynb_checkpoints/" >> .gitignore
