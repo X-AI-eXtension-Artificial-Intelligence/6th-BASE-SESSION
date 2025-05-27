@@ -38,4 +38,30 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         # x shape: (batch_size, seq_length, d_model)
         x = x + self.pe[:, :x.size(1), :]
-        return self.dropout(x) 
+        return self.dropout(x)
+
+class RelativePositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_relative_position=32):
+        super().__init__()
+        self.d_model = d_model
+        self.max_relative_position = max_relative_position
+        
+        # 상대적 위치 임베딩 행렬 초기화
+        self.relative_embeddings = nn.Parameter(
+            torch.randn(2 * max_relative_position + 1, d_model)
+        )
+        
+    def forward(self, length):
+        # 상대적 위치 인덱스 생성
+        range_vec = torch.arange(length)
+        relative_positions = range_vec[None, :] - range_vec[:, None]
+        relative_positions = torch.clamp(
+            relative_positions, 
+            -self.max_relative_position, 
+            self.max_relative_position
+        )
+        relative_positions += self.max_relative_position
+        
+        # 상대적 위치 임베딩 조회
+        embeddings = self.relative_embeddings[relative_positions]
+        return embeddings 

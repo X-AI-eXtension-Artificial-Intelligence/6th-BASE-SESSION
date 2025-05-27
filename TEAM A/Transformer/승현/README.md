@@ -215,3 +215,124 @@ Transformer 모델은 크게 다음과 같은 파일들로 구성되어 있습�
 - **WikiText2**: 실제 텍스트 파일을 다운로드 및 로드, 정규표현식 기반 토큰화, 동적 vocab 생성, 텍스트를 인덱스 시퀀스로 변환하는 과정 필요.
 
 > **요약**: Dummy 데이터는 빠른 구조 테스트용, WikiText2는 실제 자연어 처리 성능 평가용으로 사용됩니다.
+
+---
+[Updated 25.05.26]
+Position Encoding 방식이 Relative Positional Encoding으로 변경되었습니다
+다만....아직 구현 중 입니다...
+
+## Relative Positional Encoding 구현 가이드
+
+### 1. 기존 Sinusoidal Positional Encoding의 한계
+- 고정된 위치 정보만 제공
+- 시퀀스 길이가 길어질수록 성능 저하
+- 상대적 위치 관계를 직접적으로 모델링하지 못함
+
+### 2. Relative Positional Encoding 구현 단계
+
+#### 2.1 새로운 클래스 구현
+```python
+class RelativePositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_relative_position=32):
+        super().__init__()
+        self.d_model = d_model
+        self.max_relative_position = max_relative_position
+        
+        # 상대적 위치 임베딩 행렬 초기화
+        self.relative_embeddings = nn.Parameter(
+            torch.randn(2 * max_relative_position + 1, d_model)
+        )
+        
+    def forward(self, length):
+        # 상대적 위치 인덱스 생성
+        range_vec = torch.arange(length)
+        relative_positions = range_vec[None, :] - range_vec[:, None]
+        relative_positions = torch.clamp(
+            relative_positions, 
+            -self.max_relative_position, 
+            self.max_relative_position
+        )
+        relative_positions += self.max_relative_position
+        
+        # 상대적 위치 임베딩 조회
+        embeddings = self.relative_embeddings[relative_positions]
+        return embeddings
+```
+
+#### 2.2 ScaledDotProductAttention 수정
+```python
+def forward(self, query, key, value, relative_embeddings=None):
+    d_k = query.size(-1)
+    
+    # 기본 어텐션 스코어 계산
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+    
+    # 상대적 위치 정보 추가
+    if relative_embeddings is not None:
+        relative_scores = torch.matmul(query, relative_embeddings.transpose(-2, -1))
+        scores = scores + relative_scores
+    
+    # 나머지 처리 (마스킹, 소프트맥스 등)
+    ...
+```
+
+#### 2.3 MultiHeadAttention 수정
+```python
+def forward(self, query, key, value, mask=None):
+    batch_size = query.size(0)
+    
+    # 기존 Q, K, V 변환
+    Q = self.W_q(query).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
+    K = self.W_k(key).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
+    V = self.W_v(value).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
+    
+    # 상대적 위치 임베딩 생성
+    seq_length = query.size(1)
+    relative_embeddings = self.relative_encoding(seq_length)
+    
+    # 수정된 어텐션 적용
+    output, attention_weights = self.attention(Q, K, V, relative_embeddings, mask)
+    ...
+```
+
+### 3. 주요 변경사항
+
+1. **위치 인코딩 방식 변경**
+   - 고정된 사인/코사인 함수 대신 학습 가능한 상대적 위치 임베딩 사용
+   - 최대 상대적 위치 거리 제한 (max_relative_position)
+
+2. **어텐션 계산 수정**
+   - 기본 어텐션 스코어에 상대적 위치 정보 추가
+   - 쿼리와 상대적 위치 임베딩 간의 내적 계산
+
+3. **파라미터 추가**
+   - 상대적 위치 임베딩 행렬 (학습 가능한 파라미터)
+   - 최대 상대적 위치 거리 설정
+
+### 4. 장점
+
+1. **더 나은 위치 관계 모델링**
+   - 토큰 간의 상대적 거리를 직접 학습
+   - 긴 시퀀스에서도 효과적인 위치 정보 제공
+
+2. **유연한 위치 정보**
+   - 학습 가능한 파라미터로 인해 데이터에 맞게 최적화
+   - 고정된 패턴이 아닌 동적인 위치 관계 학습
+
+3. **확장성**
+   - 다양한 길이의 시퀀스에 대응 가능
+   - 최대 상대적 위치 거리를 조절하여 메모리 사용량 제어
+
+### 5. 구현 시 주의사항
+
+1. **메모리 사용량**
+   - 상대적 위치 임베딩 행렬의 크기 관리
+   - max_relative_position 값의 적절한 설정
+
+2. **학습 안정성**
+   - 상대적 위치 임베딩의 초기화 방식
+   - 학습률 조정 필요
+
+3. **성능 최적화**
+   - 배치 처리 시 효율적인 계산
+   - 캐싱을 통한 반복 계산 방지
