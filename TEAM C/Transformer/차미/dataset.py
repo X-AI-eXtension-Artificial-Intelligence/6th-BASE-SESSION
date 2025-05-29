@@ -22,6 +22,20 @@ class BilingualDataset(Dataset):
         self.eos_token = torch.tensor([tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64)
         self.pad_token = torch.tensor([tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64)
 
+        ## 길이 초과 문장 제거
+        self.ds = [
+            ex for ex in ds
+            if self._is_valid_length(
+                ex['translation'][src_lang],
+                ex['translation'][tgt_lang]
+            )
+        ]
+
+    def _is_valid_length(self, src_text, tgt_text):
+        src_len = len(self.tokenizer_src.encode(src_text).ids)
+        tgt_len = len(self.tokenizer_tgt.encode(tgt_text).ids)
+        return (src_len + 2 <= self.seq_len) and (tgt_len + 1 <= self.seq_len)
+
     def __len__(self):
         return len(self.ds)
 
