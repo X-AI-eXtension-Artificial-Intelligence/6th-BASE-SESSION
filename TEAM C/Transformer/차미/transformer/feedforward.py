@@ -11,4 +11,6 @@ class FeedForwardBlock(nn.Module):
 
     def forward(self, x):
         # (batch, seq_len, d_model) -> (batch, seq_len, d_ff) -> (batch, seq_len, d_model)
-        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+        # return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+        ## relu에서 gelu로 수정
+        return self.linear_2(self.dropout(torch.gelu(self.linear_1(x))))

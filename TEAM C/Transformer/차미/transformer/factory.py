@@ -8,22 +8,33 @@ from .projection import ProjectionLayer
 from .model import Transformer
 
 # Transformer 모델을 구성하는 팩토리 함수
-def build_transformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, d_model=512, N=6, h=8, dropout=0.1, d_ff=2048):
+def build_transformer(
+    src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len,
+    d_model=512, N=6, h=8, dropout=0.1, d_ff=2048,
+    use_absolute_pos=False):
+    
     src_embed = InputEmbeddings(d_model, src_vocab_size)
     tgt_embed = InputEmbeddings(d_model, tgt_vocab_size)
-    src_pos = PositionalEncoding(d_model, src_seq_len, dropout)
-    tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout)
+
+    if use_absolute_pos:
+        src_pos = PositionalEncoding(d_model, src_seq_len, dropout)
+        tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout)
+    else:
+        src_pos = nn.Identity()  ## 아무 작업도 하지 않음
+        tgt_pos = nn.Identity()
 
     encoder_blocks = []
     for _ in range(N):
-        encoder_self_attn = MultiHeadAttentionBlock(d_model, h, dropout)
+        ## 수정 
+        encoder_self_attn = MultiHeadAttentionBlock(d_model, h, dropout, max_seq_len=src_seq_len)
         ff = FeedForwardBlock(d_model, d_ff, dropout)
         encoder_blocks.append(EncoderBlock(d_model, encoder_self_attn, ff, dropout))
 
     decoder_blocks = []
     for _ in range(N):
-        decoder_self_attn = MultiHeadAttentionBlock(d_model, h, dropout)
-        decoder_cross_attn = MultiHeadAttentionBlock(d_model, h, dropout)
+        ## 수정
+        decoder_self_attn = MultiHeadAttentionBlock(d_model, h, dropout, max_seq_len=tgt_seq_len)
+        decoder_cross_attn = MultiHeadAttentionBlock(d_model, h, dropout, max_seq_len=tgt_seq_len)
         ff = FeedForwardBlock(d_model, d_ff, dropout)
         decoder_blocks.append(DecoderBlock(d_model, decoder_self_attn, decoder_cross_attn, ff, dropout))
 

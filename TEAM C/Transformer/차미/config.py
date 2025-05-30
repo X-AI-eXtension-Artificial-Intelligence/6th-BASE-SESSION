@@ -8,7 +8,7 @@ def get_config():
         "lr": 1e-4, # 학습률 설정
         "seq_len": 350, # 시퀀스 길이
         "d_model": 512, # 모델 차원 수
-        "datasource": "ted_hrlr_translate", # TED Talks 영어-한국어 번역
+        "datasource": "opus100", 
         "lang_src": "en", # 소스 언어
         "lang_tgt": "ko", # 타겟 언어
         "model_folder": "weights", # 모델 가중치 저장 폴더

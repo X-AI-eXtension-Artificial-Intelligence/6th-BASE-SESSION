@@ -1,8 +1,3 @@
-"""
-@author : Hyunwoong
-@when : 2019-10-22
-@homepage : https://github.com/gusdnd852
-"""
 import math
 import time
 
@@ -11,18 +6,16 @@ from torch.optim import Adam
 
 from data import *
 from models.model.transformer import Transformer
-from util.bleu import idx_to_word, get_bleu
+from util.bleu import idx_to_word
 from util.epoch_timer import epoch_time
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-
 def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
-        nn.init.kaiming_uniform(m.weight.data)
-
+        nn.init.kaiming_uniform_(m.weight.data)
 
 model = Transformer(src_pad_idx=src_pad_idx,
                     trg_pad_idx=trg_pad_idx,
@@ -51,7 +44,6 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer,
 
 criterion = nn.CrossEntropyLoss(ignore_index=src_pad_idx)
 
-
 def train(model, iterator, optimizer, criterion, clip):
     model.train()
     epoch_loss = 0
@@ -74,13 +66,12 @@ def train(model, iterator, optimizer, criterion, clip):
 
     return epoch_loss / len(iterator)
 
-
 def evaluate(model, iterator, criterion):
     model.eval()
     epoch_loss = 0
     batch_bleu = []
 
-    smoothie = SmoothingFunction().method4 
+    smoothie = SmoothingFunction().method4
 
     with torch.no_grad():
         for i, batch in enumerate(iterator):
@@ -93,30 +84,29 @@ def evaluate(model, iterator, criterion):
 
             loss = criterion(output_reshape, trg_gold)
             epoch_loss += loss.item()
-            
+
             total_bleu = []
-            for j in range(src.size(0)):  # 현재 배치 크기만큼 반복
+            for j in range(src.size(0)):
                 try:
-                    trg_words = idx_to_word(trg[j], loader.trg_vocab).split()
-                    pred_ids = output[j].max(dim=1)[1]  # [seq_len]
-                    pred_words = idx_to_word(pred_ids, loader.trg_vocab).split()
+                    trg_seq = trg[j, 1:]
+                    trg_words = idx_to_word(trg_seq, loader.target.vocab).split()
+
+                    pred_ids = output[j].argmax(dim=1)
+                    pred_words = idx_to_word(pred_ids, loader.target.vocab).split()
+
+                    if '<eos>' in pred_words:
+                        pred_words = pred_words[:pred_words.index('<eos>')]
 
                     bleu = sentence_bleu([trg_words], pred_words, smoothing_function=smoothie)
                     total_bleu.append(bleu)
-                except Exception as e:
-                    total_bleu.append(0.0)  # 오류 발생 시 BLEU 0
+                except:
+                    total_bleu.append(0.0)
 
-            if total_bleu:
-                avg_bleu = sum(total_bleu) / len(total_bleu)
-            else:
-                avg_bleu = 0.0
-
+            avg_bleu = sum(total_bleu) / len(total_bleu) if total_bleu else 0.0
             batch_bleu.append(avg_bleu)
 
     final_bleu = sum(batch_bleu) / len(batch_bleu) if batch_bleu else 0.0
     return epoch_loss / len(iterator), final_bleu
-
-
 
 def run(total_epoch, best_loss):
     train_losses, test_losses, bleus = [], [], []
@@ -136,25 +126,19 @@ def run(total_epoch, best_loss):
 
         if valid_loss < best_loss:
             best_loss = valid_loss
-            torch.save(model.state_dict(), 'saved/model-{0}.pt'.format(valid_loss))
+            torch.save(model.state_dict(), f'saved/model-{valid_loss:.3f}.pt')
 
-        f = open('result/train_loss.txt', 'w')
-        f.write(str(train_losses))
-        f.close()
-
-        f = open('result/bleu.txt', 'w')
-        f.write(str(bleus))
-        f.close()
-
-        f = open('result/test_loss.txt', 'w')
-        f.write(str(test_losses))
-        f.close()
+        with open('result/train_loss.txt', 'w') as f:
+            f.write(str(train_losses))
+        with open('result/bleu.txt', 'w') as f:
+            f.write(str(bleus))
+        with open('result/test_loss.txt', 'w') as f:
+            f.write(str(test_losses))
 
         print(f'Epoch: {step + 1} | Time: {epoch_mins}m {epoch_secs}s')
         print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
         print(f'\tVal Loss: {valid_loss:.3f} |  Val PPL: {math.exp(valid_loss):7.3f}')
         print(f'\tBLEU Score: {bleu:.3f}')
-
 
 if __name__ == '__main__':
     run(total_epoch=epoch, best_loss=inf)

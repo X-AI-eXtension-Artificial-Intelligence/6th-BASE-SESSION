@@ -57,6 +57,25 @@ class PositionalEncoding(nn.Module):
         # 역전파 할 필요 x
         x = x + (self.pe[:,:x.shape[1],:]).requires_grad_(False)
         return self.dropout(x)
+# LearnablePositionalEncoding 클래스
+class LearnablePositionalEncoding(nn.Module):
+    def __init__(self, max_len: int, d_model: int, dropout: float = 0.1):
+        super().__init__()
+        self.pos_embedding = nn.Embedding(max_len, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (batch_size, seq_len, d_model)
+        Returns:
+            positionally encoded x
+        """
+        batch_size, seq_len, _ = x.size()
+        positions = torch.arange(0, seq_len, device=x.device).unsqueeze(0).expand(batch_size, seq_len)
+        pos_emb = self.pos_embedding(positions)  # (batch, seq_len, d_model)
+        return self.dropout(x + pos_emb)
+
 
 # Layer Normalization 구현   
 #레이어 정규화   
@@ -277,9 +296,13 @@ def build_transformer(src_vocab_size : int, tgt_vocab_size : int, src_seq_len : 
     tgt_embed = InputEmbeddings(d_model, tgt_vocab_size)
     
     # Create positional encoding layers
-    src_pos = PositionalEncoding(d_model,src_seq_len,dropout)
-    tgt_pos = PositionalEncoding(d_model,tgt_vocab_size,dropout)
-    
+    # src_pos = PositionalEncoding(d_model,src_seq_len,dropout)
+    # tgt_pos = PositionalEncoding(d_model,tgt_vocab_size,dropout)
+    # → Learnable PositionalEncoding으로 대체:
+    src_pos = LearnablePositionalEncoding(max_len=src_seq_len, d_model=d_model, dropout=dropout)
+    tgt_pos = LearnablePositionalEncoding(max_len=tgt_seq_len, d_model=d_model, dropout=dropout)
+        
+
     #Create encoder blocks
     encoder_blocks=[]
     for _ in range(N):

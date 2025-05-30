@@ -4,9 +4,9 @@ from attention import MultiHeadAttention
 from feed_forward import PositionWiseFeedForward
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1, use_relative_pe=False, max_relative_position=32):
         super().__init__()
-        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout)
+        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout, max_relative_position)
         self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -24,10 +24,10 @@ class EncoderLayer(nn.Module):
         return x
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
+    def __init__(self, d_model, num_heads, d_ff, dropout=0.1, use_relative_pe=False, max_relative_position=32):
         super().__init__()
-        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout)
-        self.cross_attention = MultiHeadAttention(d_model, num_heads, dropout)
+        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout, max_relative_position)
+        self.cross_attention = MultiHeadAttention(d_model, num_heads, dropout, max_relative_position)
         self.feed_forward = PositionWiseFeedForward(d_model, d_ff, dropout)
         
         self.norm1 = nn.LayerNorm(d_model)

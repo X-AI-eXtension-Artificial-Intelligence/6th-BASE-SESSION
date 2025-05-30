@@ -27,7 +27,7 @@ from tokenizers.pre_tokenizers import Whitespace
 import torchmetrics  # 평가 지표 (CER, WER, BLEU 등)
 from torch.utils.tensorboard import SummaryWriter  # TensorBoard 로깅
 
-# -------------------------- 디코딩 함수 --------------------------
+# 디코딩 함수
 def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device):
     """
     그리디 디코딩 구현
@@ -40,10 +40,11 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     :param device: 'cpu' 또는 'cuda'
     :return: 디코딩된 토큰 ID 시퀀스 (seq_len)
     """
+
     sos_idx = tokenizer_tgt.token_to_id('[SOS]')  # 시작 토큰 ID
     eos_idx = tokenizer_tgt.token_to_id('[EOS]')  # 종료 토큰 ID
 
-    # 인코더 출력 계산 (재사용)
+    # 인코더 출력 계산
     encoder_output = model.encode(source, source_mask)
     # 디코더 입력에 [SOS] 토큰 삽입
     decoder_input = torch.empty(1, 1).fill_(sos_idx).type_as(source).to(device)
@@ -58,6 +59,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
         # 디코더 단계 실행
         out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+
         # 마지막 시점 단어 분포 예측
         prob = model.project(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
@@ -74,7 +76,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
     return decoder_input.squeeze(0)
 
-# -------------------------- 검증 함수 --------------------------
+# 검증 함수
 def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_step, writer, num_examples=2):
     """
     검증 데이터셋에서 예시 문장들을 디코딩하고, CER/WER/BLEU 계산 후 TensorBoard에 기록
@@ -104,12 +106,15 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
     with torch.no_grad():
         for batch in validation_ds:
             count += 1
+
+            # 배치 내 인코더 인풋과 마스크 device에 올리기
             encoder_input = batch['encoder_input'].to(device)
             encoder_mask = batch['encoder_mask'].to(device)
 
-            assert encoder_input.size(0) == 1, "Batch size must be 1 for validation"
+            # greedy하게 디코딩해서 output 뽑기
             model_out = greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device)
 
+            # 결과 cpu numpy 형태로 디코딩해서 각각에 저장
             src_text = batch['src_text'][0]
             tgt_text = batch['tgt_text'][0]
             pred_text = tokenizer_tgt.decode(model_out.cpu().numpy())
@@ -138,9 +143,9 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
         # BLEU 계산 및 기록
         bleu = torchmetrics.BLEUScore()(predicted, expected)
         writer.add_scalar('validation/bleu', bleu, global_step)
-        writer.flush()
+        writer.flush() 
 
-# -------------------------- 토크나이저 생성/로드 --------------------------
+# 토크나이저 생성/로드
 def get_all_sentences(ds, lang):
     # 데이터셋의 모든 문장 스트림으로 반환
     for item in ds:
@@ -162,46 +167,46 @@ def get_or_build_tokenizer(config, ds, lang):
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
     return tokenizer
 
-# -------------------------- 데이터로더 생성 --------------------------
+# 데이터로더 생성
 def get_ds(config):
-    """
-    데이터셋 로드 & 토크나이저 빌드 & 학습/검증 분할 & DataLoader 반환
-    """
-    # Hugging Face 데이터셋 로드 (train split만 제공됨)
+    # 전체 데이터셋 로드
     ds_raw = load_dataset(config['datasource'], f"{config['lang_src']}-{config['lang_tgt']}", split='train')
+    
+    # 상위 10000개 샘플만 사용
+    ds_raw = ds_raw.select(range(min(10000, len(ds_raw))))
 
-    # 토크나이저
+    # 토크나이저 준비
     tokenizer_src = get_or_build_tokenizer(config, ds_raw, config['lang_src'])
     tokenizer_tgt = get_or_build_tokenizer(config, ds_raw, config['lang_tgt'])
 
-    # 90% 학습, 10% 검증 분할
+    # 학습/검증 분할 (90/10)
     train_size = int(0.9 * len(ds_raw))
     val_size = len(ds_raw) - train_size
     train_raw, val_raw = random_split(ds_raw, [train_size, val_size])
 
-    train_ds = BilingualDataset(train_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
-    val_ds   = BilingualDataset(val_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
+    train_ds = BilingualDataset(train_raw, tokenizer_src, tokenizer_tgt,
+                                config['lang_src'], config['lang_tgt'], config['seq_len'])
+    val_ds = BilingualDataset(val_raw, tokenizer_src, tokenizer_tgt,
+                              config['lang_src'], config['lang_tgt'], config['seq_len'])
 
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
-    val_loader   = DataLoader(val_ds,   batch_size=1, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=True)
 
-    # 문장 길이 통계 출력 (디버깅용)
+    # 문장 길이 출력
     max_src = max(len(tokenizer_src.encode(item['translation'][config['lang_src']]).ids) for item in ds_raw)
     max_tgt = max(len(tokenizer_tgt.encode(item['translation'][config['lang_tgt']]).ids) for item in ds_raw)
     print(f"Max length - source: {max_src}, target: {max_tgt}")
 
     return train_loader, val_loader, tokenizer_src, tokenizer_tgt
 
-# -------------------------- 모델 및 학습 루프 --------------------------
+
+# 모델 및 학습 루프
 def get_model(config, vocab_src_len, vocab_tgt_len):
     # Transformer 모델 생성
     return build_transformer(vocab_src_len, vocab_tgt_len, config['seq_len'], config['seq_len'], d_model=config['d_model'])
 
 
 def train_model(config):
-    """
-    전체 학습 파이프라인: 디바이스 설정, 데이터로더/모델 준비, 옵티마이저, 체크포인트 로드, 학습/검증, 모델 저장
-    """
     # 디바이스 선택 (cuda > mps > cpu)
     device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.has_mps else 'cpu')
     print("Using device:", device)
@@ -212,8 +217,10 @@ def train_model(config):
 
     # 데이터로더 및 토크나이저 준비
     train_loader, val_loader, tokenizer_src, tokenizer_tgt = get_ds(config)
+
     # 모델 초기화 및 장치 할당
     model = get_model(config, tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size()).to(device)
+
     # TensorBoard SummaryWriter
     writer = SummaryWriter(config['experiment_name'])
 

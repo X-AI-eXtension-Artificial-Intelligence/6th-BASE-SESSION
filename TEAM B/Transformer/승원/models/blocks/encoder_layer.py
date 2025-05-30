@@ -25,17 +25,19 @@ class EncoderLayer(nn.Module):
     def forward(self, x, src_mask):
         # 1. compute self attention
         _x = x
+        x = self.norm1(x + _x) # PreNorm 방식 적용
         x = self.attention(q=x, k=x, v=x, mask=src_mask)
         
         # 2. add and norm
         x = self.dropout1(x)
-        x = self.norm1(x + _x)
+        #x = self.norm1(x + _x) #기존 Norm 위치
         
         # 3. positionwise feed forward network
         _x = x
+        x = self.norm2(x + _x) # PreNorm 방식 적용
         x = self.ffn(x)
       
         # 4. add and norm
         x = self.dropout2(x)
-        x = self.norm2(x + _x)
+        #x = self.norm2(x + _x)
         return x

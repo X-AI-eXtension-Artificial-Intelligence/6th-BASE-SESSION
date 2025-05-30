@@ -7,12 +7,9 @@ from dataset import BilingualDataset
 import torch
 import sys
 
+
+# 번역 확인용 함수
 def translate(sentence: str):
-    """
-    주어진 문장을 번역하거나, 숫자 입력 시 해당 인덱스의 테스트 문장 번역
-    :param sentence: 번역할 문장 또는 데이터셋 인덱스 문자열
-    :return: 번역 결과 문자열
-    """
     # 디바이스 설정 (CUDA 사용 가능 시 GPU, 아니면 CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
@@ -65,6 +62,7 @@ def translate(sentence: str):
     # 모델을 평가 모드로 전환
     model.eval()
     with torch.no_grad():
+
         # 소스 문장 토큰화 및 패딩
         src_tokens = tokenizer_src.encode(sentence)
         src_input = torch.cat([
@@ -76,6 +74,7 @@ def translate(sentence: str):
                 dtype=torch.int64
             )
         ], dim=0).to(device)
+        
         # 소스 패딩 마스크 생성 -> (1, 1, seq_len)
         src_mask = (
             src_input != tokenizer_src.token_to_id('[PAD]')
@@ -126,6 +125,5 @@ def translate(sentence: str):
     return tokenizer_tgt.decode(dec_input[0].tolist())
 
 if __name__ == '__main__':
-    # 커맨드라인 인수로 문장 또는 인덱스 입력
     input_arg = sys.argv[1] if len(sys.argv) > 1 else "I am not a very good a student."
     translate(input_arg)

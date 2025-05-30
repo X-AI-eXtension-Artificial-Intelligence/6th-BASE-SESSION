@@ -19,7 +19,7 @@ HfFolder.save_token(hf_token)
 # ----- 설정 -----
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 64
-EPOCHS = 20
+EPOCHS = 100
 MAX_LEN = 256
 LR = 5e-4
 CHECKPOINT_DIR = "./checkpoints"
@@ -72,7 +72,7 @@ def collate_fn(batch):
 train_loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
 
 # ----- 모델 구성 -----
-model = build_model(len(vocab_src), len(vocab_tgt), device=DEVICE)
+model = build_model(len(vocab_src), len(vocab_tgt), device=DEVICE, gated=True)
 optimizer = optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 

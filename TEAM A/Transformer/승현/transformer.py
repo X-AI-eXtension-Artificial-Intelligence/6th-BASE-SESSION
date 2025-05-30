@@ -1,32 +1,38 @@
 import torch
 import torch.nn as nn
 from attention import MultiHeadAttention
-from feed_forward import PositionWiseFeedForward, PositionalEncoding
+from feed_forward import PositionWiseFeedForward, PositionalEncoding, RelativePositionalEncoding
 from transformer_layers import EncoderLayer, DecoderLayer
 import math
 
 class Transformer(nn.Module):
     def __init__(self, src_vocab_size, tgt_vocab_size, d_model=512, num_heads=8, 
                  num_encoder_layers=6, num_decoder_layers=6, d_ff=2048, max_seq_length=5000, 
-                 dropout=0.1):
+                 dropout=0.1, use_relative_pe=False, max_relative_position=32):
         super().__init__()
         
         self.d_model = d_model
+        self.use_relative_pe = use_relative_pe
         
         # Embedding layers
         self.src_embedding = nn.Embedding(src_vocab_size, d_model)
         self.tgt_embedding = nn.Embedding(tgt_vocab_size, d_model)
-        self.positional_encoding = PositionalEncoding(d_model, max_seq_length, dropout)
+        
+        # Positional Encoding
+        if use_relative_pe:
+            self.positional_encoding = RelativePositionalEncoding(d_model, max_relative_position)
+        else:
+            self.positional_encoding = PositionalEncoding(d_model, max_seq_length, dropout)
         
         # Encoder
         self.encoder_layers = nn.ModuleList([
-            EncoderLayer(d_model, num_heads, d_ff, dropout)
+            EncoderLayer(d_model, num_heads, d_ff, dropout, use_relative_pe, max_relative_position)
             for _ in range(num_encoder_layers)
         ])
         
         # Decoder
         self.decoder_layers = nn.ModuleList([
-            DecoderLayer(d_model, num_heads, d_ff, dropout)
+            DecoderLayer(d_model, num_heads, d_ff, dropout, use_relative_pe, max_relative_position)
             for _ in range(num_decoder_layers)
         ])
         
@@ -56,11 +62,13 @@ class Transformer(nn.Module):
         
         # Source embedding and positional encoding
         src_embedded = self.src_embedding(src) * math.sqrt(self.d_model)
-        src_embedded = self.positional_encoding(src_embedded)
+        if not self.use_relative_pe:
+            src_embedded = self.positional_encoding(src_embedded)
         
         # Target embedding and positional encoding
         tgt_embedded = self.tgt_embedding(tgt) * math.sqrt(self.d_model)
-        tgt_embedded = self.positional_encoding(tgt_embedded)
+        if not self.use_relative_pe:
+            tgt_embedded = self.positional_encoding(tgt_embedded)
         
         # Encoder
         enc_output = src_embedded
